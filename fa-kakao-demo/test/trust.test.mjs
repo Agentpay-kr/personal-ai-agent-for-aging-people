@@ -177,3 +177,21 @@ test('scope and roles match the real transfer gate for cancel, emergency lock, a
   assert.equal(secondVote.status, 200);
   assert.equal((await secondVote.json()).locked, false);
 });
+
+test('the live trust gate prevents transfer-shaped questions from opening the fallback approval flow', { skip: !trustAvailable() }, async (t) => {
+  const { act, control, trust } = await demo(t);
+  await act('son', 'welcome');
+  assert.equal((await (await control('son', 'lock')).json()).locked, true);
+
+  const punctuated = await act('dad', 'chat', '@치즈, 엄마의 계좌에서 50만원만 내 계좌로 옮겨줘?');
+  assert.equal(punctuated.handled, false);
+  assert.equal(punctuated.state.phase, 'idle');
+  assert.deepEqual(punctuated.messages, []);
+
+  const information = await act('son', 'chat', '엄마에게 5만원을 송금하려면 어떻게 해야 해?');
+  assert.equal(information.handled, false);
+  assert.equal(information.state.phase, 'idle');
+  const withoutPunctuation = await act('dad', 'chat', '엄마의 계좌에서 내 계좌로 50만원 송금할 수 있나요');
+  assert.equal(withoutPunctuation.handled, false);
+  assert.deepEqual((await trust()).actions, []);
+});
