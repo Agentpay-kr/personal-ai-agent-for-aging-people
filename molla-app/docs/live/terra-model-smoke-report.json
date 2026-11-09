@@ -1,0 +1,40 @@
+{
+  "passed": true,
+  "provider": "letsur",
+  "model": "gpt-6.1-terra",
+  "checkedAt": "2026-11-09T04:31:41.006Z",
+  "android": false,
+  "checks": [
+    "Mobile HTTP client → actual authenticated Node API → actual Letsur model",
+    "No implicit consent; memory sharing remains off",
+    "Identical requestId is not billed or generated twice",
+    "Other family member cannot read this conversation",
+    "Actual model-created message draft awaits owner approval; no sending"
+  ],
+  "responses": [
+    {
+      "reply": "오늘도 당신의 하루가 따뜻한 마음과 작은 행복으로 가득하길 바라요.",
+      "usage": {
+        "inputTokens": 492,
+        "outputTokens": 44
+      },
+      "estimatedCost": {
+        "amount": 0.000712,
+        "currency": "unit"
+      }
+    },
+    {
+      "body": "내일 병원에 다녀올게요.",
+      "usage": {
+        "inputTokens": 548,
+        "outputTokens": 72
+      },
+      "estimatedCost": {
+        "amount": 0.000908,
+        "currency": "unit"
+      }
+    }
+  ],
+  "reasoningEffort": "medium",
+  "smokeDurationMs": 9505
+}

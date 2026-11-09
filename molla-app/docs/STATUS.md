@@ -5,9 +5,9 @@
 | 기능 | 구현·검증 |
 |---|---|
 | React Native iOS/Android 앱 | 타입 검사와 JS·리소스 export 통과. APK/IPA 설치는 미검증 |
-| Letsur 모델 | 실제 `gpt-4.1-mini` 한국어 응답·승인 대기 초안 검증. `live/letsur-model-smoke-report.json` |
+| Letsur 모델 | 기본 `gpt-6.1-terra`, 추론 `medium`. 실제 한국어 응답·승인 대기 초안 검증. `live/terra-model-smoke-report.json` |
 | Vercel Gateway 모델 | 실제 `openai/gpt-5-mini` 응답·초안·중복 요청 방지 검증. `live/gateway-model-smoke-report.json` |
-| 가족·기억·동의·승인·화면 접근 | 서버 테스트 66개 통과. 다른 소유자의 기기·화면에 접근하지 않음 |
+| 가족·기억·동의·승인·화면 접근 | 서버 테스트 68개 통과. 다른 소유자의 기기·화면에 접근하지 않음 |
 | 앱 인증·승인·VM 견적·화면 확인 | 명시적 테스트 API를 사용한 UI 흐름 9개 통과. `live/ui-contract-report.json` |
 | 클라우드 Android | 엄마의 저장형 VM에서 실제 Letsur 계획·승인·설정 앱 실행 및 종료 검증. 아빠·자녀 VM은 미배정. `live/letsur-android-live-report.json` |
 | 실제 Android 화면 보기 | 소유자 인증·권한을 검사하는 캡처 API와 3초 갱신 UI에서 클라우드 Android의 실제 설정 화면 표시 확인. 다른 소유자 접근 거부 확인 |

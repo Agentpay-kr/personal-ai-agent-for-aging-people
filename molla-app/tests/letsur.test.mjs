@@ -11,6 +11,21 @@ test('Letsur adapter sends one structured request to the documented endpoint wit
 test('Letsur errors are sanitized and never fall back or retry',async()=>{
  for(const status of [400,401,402,403,429,503]){let calls=0;const planner=new LLMPlanner({env,generate:()=>assert.fail(),fetcher:async()=>{calls++;return new Response('test-only-secret private prompt',{status});}});await assert.rejects(planner.plan({}),e=>e.status===(status===429?429:502)&&!e.message.includes('test-only-secret')&&!e.message.includes('private prompt'));assert.equal(calls,1);}
 });
+
+test('Terra uses a reasoning-compatible budget and repeats the exact output contract',async()=>{
+ let calls=0;const terraEnv={...env,LETSUR_MODEL:'gpt-6.1-terra'};
+ const planner=new LLMPlanner({env:terraEnv,generate:()=>assert.fail('No provider fallback'),fetcher:async(url,init)=>{
+  calls++;const body=JSON.parse(init.body);assert.equal(body.model,'gpt-6.1-terra');assert.equal(body.reasoning_effort,'medium');assert.equal(body.max_completion_tokens,8192);assert.equal(body.max_tokens,undefined);
+  assert.equal(body.response_format.json_schema.strict,true);assert.ok(body.messages[0].content.includes(JSON.stringify(body.response_format.json_schema.schema)));return response();
+ }});
+ const result=await planner.plan({request:'문자 초안'});assert.equal(calls,1);assert.deepEqual(result.plan,plan);assert.equal(result.model,'gpt-6.1-terra');
+});
+
+test('Terra rejects renamed output fields and invalid reasoning settings without executing a task',async()=>{
+ const terraEnv={...env,LETSUR_MODEL:'gpt-6.1-terra'};
+ await assert.rejects(new LLMPlanner({env:terraEnv,fetcher:async()=>response({choices:[{finish_reason:'stop',message:{content:JSON.stringify({type:'conversation',response:'안녕하세요',message:null,recipient:null,app:null})}}]})}).plan({}),{status:502});
+ await assert.rejects(new LLMPlanner({env:{...terraEnv,LETSUR_REASONING_EFFORT:'invalid'},fetcher:()=>assert.fail('Invalid settings must not be sent')}).plan({}),{status:502});
+});
 test('Truncated, refused, malformed and invalid-schema completions cannot become tasks',async()=>{
  for(const data of [{choices:[{finish_reason:'length',message:{content:JSON.stringify(plan)}}]},{choices:[{finish_reason:'stop',message:{refusal:'no',content:JSON.stringify(plan)}}]},{choices:[{finish_reason:'stop',message:{content:'not-json'}}]},{choices:[{finish_reason:'stop',message:{content:'{"intent":"execute-shell"}'}}]}]){
   await assert.rejects(new LLMPlanner({env,fetcher:async()=>response(data)}).plan({}),{status:502});
