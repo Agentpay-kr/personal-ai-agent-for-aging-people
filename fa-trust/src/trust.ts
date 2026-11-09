@@ -303,29 +303,8 @@ export class FamilyTrust {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
 
-    // Transfers: the beneficiary and a non-owner requester never count as approvers.
-    if (request.kind === 'transfer' && decision.outcome !== 'block') {
-      const eligible = this.#eligibleApprovers(request);
-      const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
-      if (eligible.length < decision.approvalsRequired) {
-        decision = {
-          ...decision,
-          outcome: 'block',
-          reasons: [...decision.reasons, '⛔ 받는 사람과 요청한 사람을 빼면 승인할 가족이 부족해서 실행할 수 없어요.'],
-        };
-      } else if (excluded.length) {
-        decision = {
-          ...decision,
-          reasons: [
-            ...decision.reasons,
-            `🚫 ${excluded.map((m) => this.name(m)).join('·')}은(는) 요청했거나 돈을 받는 사람이라 승인자로 셀 수 없어요. ` +
-              `${eligible.map((m) => this.name(m)).join('·')} 중 ${decision.approvalsRequired}명의 기기 승인이 필요해요.`,
-          ],
-        };
-      }
-    }
-
-    // The AI judge runs after the rules (including approver exclusion). It can only escalate.
+    // AI judge: reads router metadata, raw messages and logs. Bounded authority (see judge.ts):
+    // it can always raise risk, may lift only a low-severity rule hold, never a hard block.
     let judged: (JudgeVerdict & { effect: JudgeEffect }) | undefined;
     if (this.#judge && decision.outcome !== 'block') {
       const verdict = await this.#runJudge({
@@ -341,6 +320,31 @@ export class FamilyTrust {
       });
       decision = combined.decision;
       judged = { ...verdict, effect: combined.effect };
+    }
+
+    // Transfers: the beneficiary and a non-owner requester never count as approvers.
+    // Runs after the judge so it checks the final approval count: if a judge hold asks for more
+    // approvers than are eligible, the request is blocked outright instead of waiting forever.
+    if (request.kind === 'transfer' && decision.outcome !== 'block') {
+      const eligible = this.#eligibleApprovers(request);
+      const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
+      if (eligible.length < decision.approvalsRequired) {
+        decision = {
+          ...decision,
+          outcome: 'block',
+          reasons: [...decision.reasons, '⛔ 받는 사람과 요청한 사람을 빼면 승인할 가족이 부족해서 실행할 수 없어요.'],
+        };
+      } else if (excluded.length) {
+        const excludedNames = excluded.map((m) => this.name(m)).join('·');
+        decision = {
+          ...decision,
+          reasons: [
+            ...decision.reasons,
+            `🚫 ${excludedNames}${josa(excludedNames, '은/는')} 요청했거나 돈을 받는 사람이라 승인자로 셀 수 없어요. ` +
+              `${eligible.map((m) => this.name(m)).join('·')} 중 ${decision.approvalsRequired}명의 기기 승인이 필요해요.`,
+          ],
+        };
+      }
     }
 
     const action: PendingAction = {

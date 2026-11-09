@@ -277,3 +277,46 @@ test('claude judge: refusals and missing output raise so the caller can fall bac
     /no verdict/,
   );
 });
+
+// ───────── order: AI judge first, then approver eligibility ─────────
+
+const toSon = {
+  owner: 'mom',
+  kind: 'transfer' as const,
+  amountKRW: 100_000,
+  payee: '우리 1002 (아들)',
+  payeeOwner: 'son',
+  summary: '아들에게 10만원',
+};
+
+test('trust: a judge hold that needs more approvers than are eligible is blocked, not left waiting', async () => {
+  const trust = new FamilyTrust({
+    members: [
+      { id: 'mom', name: '엄마', role: 'parent' },
+      { id: 'son', name: '아들', role: 'child' },
+    ],
+    policy: { registeredPayees: { mom: ['우리 1002 (아들)'] } },
+    judge: async () => v('hold', { reasons: ['통화 중 송금이에요'] }),
+  });
+  const mom = trust.createDevice('mom');
+  trust.createDevice('son');
+  const a = await trust.request(mom, toSon);
+  assert.equal(a.judge?.verdict, 'hold');
+  assert.equal(a.status, 'blocked');
+  assert.ok(a.decision.reasons.some((r) => r.includes('승인할 가족이 부족')));
+});
+
+test('trust: with enough eligible approvers the same judge hold stays held', async () => {
+  const trust = new FamilyTrust({
+    members,
+    policy: { registeredPayees: { mom: ['우리 1002 (아들)'] } },
+    judge: async () => v('hold'),
+  });
+  const mom = trust.createDevice('mom');
+  trust.createDevice('dad');
+  trust.createDevice('son');
+  const a = await trust.request(mom, toSon);
+  assert.equal(a.status, 'held');
+  assert.equal(a.decision.approvalsRequired, 2);
+  assert.ok(a.decision.reasons.some((r) => r.includes('아들은 요청했거나 돈을 받는 사람')));
+});

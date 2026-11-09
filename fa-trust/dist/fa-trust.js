@@ -3652,25 +3652,6 @@ var FamilyTrust = class {
     } else {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
-    if (request.kind === "transfer" && decision.outcome !== "block") {
-      const eligible = this.#eligibleApprovers(request);
-      const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
-      if (eligible.length < decision.approvalsRequired) {
-        decision = {
-          ...decision,
-          outcome: "block",
-          reasons: [...decision.reasons, "\u26D4 \uBC1B\uB294 \uC0AC\uB78C\uACFC \uC694\uCCAD\uD55C \uC0AC\uB78C\uC744 \uBE7C\uBA74 \uC2B9\uC778\uD560 \uAC00\uC871\uC774 \uBD80\uC871\uD574\uC11C \uC2E4\uD589\uD560 \uC218 \uC5C6\uC5B4\uC694."]
-        };
-      } else if (excluded.length) {
-        decision = {
-          ...decision,
-          reasons: [
-            ...decision.reasons,
-            `\u{1F6AB} ${excluded.map((m) => this.name(m)).join("\xB7")}\uC740(\uB294) \uC694\uCCAD\uD588\uAC70\uB098 \uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC774\uB77C \uC2B9\uC778\uC790\uB85C \uC140 \uC218 \uC5C6\uC5B4\uC694. ${eligible.map((m) => this.name(m)).join("\xB7")} \uC911 ${decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uC2B9\uC778\uC774 \uD544\uC694\uD574\uC694.`
-          ]
-        };
-      }
-    }
     let judged;
     if (this.#judge && decision.outcome !== "block") {
       const verdict = await this.#runJudge({
@@ -3686,6 +3667,26 @@ var FamilyTrust = class {
       });
       decision = combined.decision;
       judged = { ...verdict, effect: combined.effect };
+    }
+    if (request.kind === "transfer" && decision.outcome !== "block") {
+      const eligible = this.#eligibleApprovers(request);
+      const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
+      if (eligible.length < decision.approvalsRequired) {
+        decision = {
+          ...decision,
+          outcome: "block",
+          reasons: [...decision.reasons, "\u26D4 \uBC1B\uB294 \uC0AC\uB78C\uACFC \uC694\uCCAD\uD55C \uC0AC\uB78C\uC744 \uBE7C\uBA74 \uC2B9\uC778\uD560 \uAC00\uC871\uC774 \uBD80\uC871\uD574\uC11C \uC2E4\uD589\uD560 \uC218 \uC5C6\uC5B4\uC694."]
+        };
+      } else if (excluded.length) {
+        const excludedNames = excluded.map((m) => this.name(m)).join("\xB7");
+        decision = {
+          ...decision,
+          reasons: [
+            ...decision.reasons,
+            `\u{1F6AB} ${excludedNames}${josa(excludedNames, "\uC740/\uB294")} \uC694\uCCAD\uD588\uAC70\uB098 \uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC774\uB77C \uC2B9\uC778\uC790\uB85C \uC140 \uC218 \uC5C6\uC5B4\uC694. ${eligible.map((m) => this.name(m)).join("\xB7")} \uC911 ${decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uC2B9\uC778\uC774 \uD544\uC694\uD574\uC694.`
+          ]
+        };
+      }
     }
     const action = {
       id,
