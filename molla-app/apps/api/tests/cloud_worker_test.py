@@ -35,6 +35,13 @@ class RecoveryTests(unittest.TestCase):
             return {"id": "session-one", "request_key": "request-key-123456", "cleanup_complete": False}
         self.cloud._api = api
         self.assertEqual(worker.run({"operation": "stop", "phoneId": "saved-mom", "sessionId": "session-one", "requestId": "request-key-123456"})["state"], "closing")
+    def test_released_receipt_without_cleanup_stays_closing(self):
+        receipt = {"id": "session-one", "request_key": "request-key-123456", "state": "released", "cleanup_complete": False}
+        self.cloud._api = lambda *a: receipt
+        request = {"operation": "recover", "phoneId": "saved-mom", "requestId": "request-key-123456"}
+        self.assertEqual(worker.run(request)["state"], "closing")
+        receipt["cleanup_complete"] = True
+        self.assertEqual(worker.run(request)["state"], "stopped")
     def test_other_profile_is_rejected(self):
         self.cloud._api = lambda *a: {"id": "session-one", "profile_id": "saved-dad", "state": "ready"}
         self.assertEqual(worker.run({"operation": "status", "phoneId": "saved-mom", "sessionId": "session-one"})["code"], "session_owner_mismatch")

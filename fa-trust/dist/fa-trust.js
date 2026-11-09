@@ -3978,6 +3978,10 @@ var FamilyTrust = class {
       `\uC678\uBD80 \uCE68\uD574: ${intrusions.map((i) => i.id).join(", ")}`,
       { memories, taskRecords }
     );
+    for (const { request } of this.#actions.values()) {
+      delete request.text;
+      delete request.context;
+    }
     for (const seq of this.audit.brokenEntries()) this.#knownAuditBreaks.add(seq);
     this.#emit(
       "self_destruct",

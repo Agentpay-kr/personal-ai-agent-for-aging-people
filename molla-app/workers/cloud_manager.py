@@ -66,8 +66,11 @@ def run(data):
             raise
         if receipt.get("request_key") != request_id:
             return {"ok": False, "code": "session_owner_mismatch"}
-        if receipt.get("cleanup_complete") or receipt.get("state") == "released":
+        if receipt.get("cleanup_complete") is True:
             return {"ok": True, "state": "stopped", "phoneId": phone_id}
+        if receipt.get("state") == "released":
+            return {"ok": True, "state": "closing", "phoneId": phone_id,
+                    "sessionId": identifier(receipt.get("id"))}
         session = cloud._api("GET", f"/sessions/{identifier(receipt.get('id'))}")
     else:
         STAGE = "session_status"
@@ -81,7 +84,7 @@ def run(data):
                 receipt = cloud._api("GET", f"/sessions/requests/{identifier(data['requestId'])}")
                 if receipt.get("id") != session_id or receipt.get("request_key") != data["requestId"]:
                     return {"ok": False, "code": "session_owner_mismatch"}
-                if receipt.get("cleanup_complete"):
+                if receipt.get("cleanup_complete") is True:
                     return {"ok": True, "state": "stopped", "phoneId": phone_id}
                 return {"ok": True, "state": "closing", "phoneId": phone_id, "sessionId": session_id}
             raise

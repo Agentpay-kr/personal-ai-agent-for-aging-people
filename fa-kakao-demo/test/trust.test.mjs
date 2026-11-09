@@ -115,6 +115,37 @@ test('subscription chat is not taken over by the trust gate', async (t) => {
   assert.notEqual(cardOf(reply)?.kind, 'blocked');
 });
 
+test('a known chat guest cannot trigger intrusion recovery by requesting a transfer', { skip: !trustAvailable() }, async (t) => {
+  const { act, profile } = await demo(t);
+  const guestRoom = randomUUID();
+  const members = [...family, 'aunt'];
+  await act('son', 'welcome', undefined, guestRoom, members);
+  const before = await (await profile('son', guestRoom)).json();
+  const guest = await act('aunt', 'chat', '엄마 계좌에서 아들한테 10만원 송금해줘', guestRoom, members);
+  assert.equal(cardOf(guest)?.kind, 'blocked');
+  const after = await (await profile('son', guestRoom)).json();
+  assert.equal(after.locked, false);
+  assert.equal(after.linkCount, before.linkCount);
+  assert.equal(after.epoch, before.epoch);
+  assert.deepEqual(after.actions, []);
+});
+
+test('a different room sees the global self-destruct without the originating incident details', { skip: !trustAvailable() }, async (t) => {
+  const { act, impostor, profile } = await demo(t);
+  const other = randomUUID();
+  await act('son', 'welcome', undefined, other, ['son', 'fa']);
+  await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
+  assert.equal((await impostor()).ok, true);
+
+  const snapshot = await (await profile('son', other)).json();
+  assert.equal(snapshot.locked, true);
+  assert.equal(snapshot.evidenceCount, 0);
+  assert.deepEqual(snapshot.actions, []);
+  const incident = snapshot.events.find(({ type }) => type === 'self_destruct');
+  assert.equal(incident?.message, '외부 침해가 감지되어 송금이 자동으로 잠겼어요.');
+  assert.equal(incident?.requestId, undefined);
+});
+
 test('the profile only exposes current room transfers and rejects unknown, guest and retired room access', { skip: !trustAvailable() }, async (t) => {
   const { act, profile, control } = await demo(t);
   const other = randomUUID();

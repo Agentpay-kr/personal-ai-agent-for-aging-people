@@ -19,7 +19,7 @@ export function phoneRuntime(s,actor,env=process.env){
  const b=cloudMappings(env)[actor],session=s.cloudSessions?.[actor];
  const valid=b&&session?.phoneId===b.phoneId;
  let state=valid?session.state:'not_started';
- if(valid&&session.expiresAt&&Date.parse(session.expiresAt)<=Date.now())state='expired';
+ if(state==='ready'&&session.expiresAt&&Date.parse(session.expiresAt)<=Date.now())state='expired';
  return {configured:!!b,provider:'phone-harness',phoneId:b?.phoneId??null,state,expiresAt:valid?session.expiresAt??null:null,actions:['open_app','message_compose'],lastCheckedAt:valid?session.checkedAt??null:null};
 }
 export function runtimePhoneEnv(s,env=process.env){
@@ -56,7 +56,9 @@ export class CloudVMManager {
  async start(actor,quoteId){return this.locked(actor,async()=>{
   let s=this.load();new PolicyEngine(s).request(actor,actor,'phone');const b=this.assigned(actor),q=s.vmQuotes?.find(q=>q.quoteId===quoteId&&q.owner===actor);
   if(!q||q.used||q.phoneId!==b.phoneId||Date.parse(q.expiresAt)<=Date.now()||q.policyVersion!==member(s,actor).policyVersion)throw new DomainError('실행 견적이 만료되었어요. 비용과 시간을 다시 확인해 주세요.',409);
-  const previous=phoneRuntime(s,actor,this.env);if(['starting','ready','provisioning','unknown','closing'].includes(previous.state))throw new DomainError('VM이 실행 중이거나 확인이 필요해요. 연결 확인을 눌러 주세요.',409);
+  // A deadline only ends device access. Provider cleanup must be confirmed before replacing the receipt.
+  const previous=s.cloudSessions?.[actor];
+  if(previous&&previous.state!=='stopped')throw new DomainError('이전 VM의 종료를 확인해 주세요. 연결 확인 또는 종료를 눌러 주세요.',409);
   q.used=true;s.cloudSessions??={};s.cloudSessions[actor]={phoneId:b.phoneId,state:'starting',requestId:q.quoteId,expiresAt:new Date(Date.now()+q.durationMinutes*60000+60000).toISOString()};this.save(s);
   try{
    const response=await this.call({operation:'start',phoneId:b.phoneId,durationSeconds:q.durationMinutes*60,requestId:q.quoteId},{env:this.env});
@@ -70,13 +72,23 @@ export class CloudVMManager {
   const s=this.load();s.cloudSessions??={};const expiresAt=typeof data.expiresAt==='number'?new Date(data.expiresAt*1000).toISOString():data.expiresAt??null;
   s.cloudSessions[actor]={phoneId,requestId:s.cloudSessions[actor]?.requestId,sessionId:data.sessionId??null,state:data.state,expiresAt,serial:data.serial??null,checkedAt:now()};log(s,actor,'Android 실행 공간 상태를 확인했어요',data.state);this.save(s);
  }
+ async recover(binding,session){
+  const matching=session?.phoneId===binding.phoneId;
+  if(session&&session.state!=='stopped'&&(!matching||!session.requestId)){
+   throw new DomainError('이전 VM의 종료를 확인할 수 없어요. 운영자에게 기존 VM 배정과 실행 기록을 확인해 달라고 요청해 주세요.',409);
+  }
+  return this.call({operation:'recover',phoneId:binding.phoneId,requestId:matching?session.requestId:undefined},{env:this.env});
+ }
  async diagnose(actor){return this.locked(actor,async()=>{
   const s=this.load();new PolicyEngine(s).request(actor,actor,'phone');const b=this.assigned(actor),session=s.cloudSessions?.[actor];
-  const data=await this.call({operation:session?.sessionId&&session.phoneId===b.phoneId?'status':'recover',phoneId:b.phoneId,sessionId:session?.sessionId,requestId:session?.requestId},{env:this.env});this.record(actor,b.phoneId,data);return phoneRuntime(this.load(),actor,this.env);
+  const data=session?.sessionId&&session.phoneId===b.phoneId
+   ?await this.call({operation:'status',phoneId:b.phoneId,sessionId:session.sessionId,requestId:session.requestId},{env:this.env})
+   :await this.recover(b,session);
+  this.record(actor,b.phoneId,data);return phoneRuntime(this.load(),actor,this.env);
  });}
  async stopUnrestricted(actor){
   const s=this.load(),b=this.assigned(actor),session=s.cloudSessions?.[actor];
-  if(!session?.sessionId||session.phoneId!==b.phoneId){const recovered=await this.call({operation:'recover',phoneId:b.phoneId,requestId:session?.requestId},{env:this.env});this.record(actor,b.phoneId,recovered);if(recovered.state==='stopped')return phoneRuntime(this.load(),actor,this.env);}
+  if(!session?.sessionId||session.phoneId!==b.phoneId){const recovered=await this.recover(b,session);this.record(actor,b.phoneId,recovered);if(recovered.state==='stopped')return phoneRuntime(this.load(),actor,this.env);}
   const current=this.load().cloudSessions[actor];const data=await this.call({operation:'stop',phoneId:b.phoneId,sessionId:current.sessionId,requestId:current.requestId},{env:this.env});this.record(actor,b.phoneId,data);return phoneRuntime(this.load(),actor,this.env);
  }
  async stop(actor){return this.locked(actor,()=>this.stopUnrestricted(actor));}

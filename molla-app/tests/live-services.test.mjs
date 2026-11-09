@@ -85,6 +85,32 @@ test('VM timeout marks unknown; diagnose recovers instead of launching another p
  await assert.rejects(cloud.start('mom',cloud.quote('mom',1).quoteId));assert.equal(store.load().cloudSessions.mom.state,'unknown');
  await assert.rejects(cloud.start('mom',cloud.quote('mom',1).quoteId),{status:409});assert.equal((await cloud.diagnose('mom')).state,'ready');assert.deepEqual(calls,['start','recover']);
 });
+test('expired or mismatched previous VM sessions must retain their receipt until cleanup is confirmed',async()=>{
+ for(const [state,phoneId] of [['starting','profile-mom'],['ready','profile-mom'],['provisioning','profile-mom'],['unknown','profile-mom'],['closing','profile-mom'],['error','profile-mom'],['unknown','old-profile-mom']]){
+  const store=storage();const calls=[];const cloud=new CloudVMManager({...store,env:cloudEnv,call:async x=>{calls.push(x.operation);return ready(x.phoneId);}});
+  const s=store.load();
+  s.cloudSessions={mom:{phoneId,state,requestId:'original-receipt',expiresAt:'2000-01-01T00:00:00Z'}};
+  store.save(s);
+  const quote=cloud.quote('mom',1);
+  await assert.rejects(cloud.start('mom',quote.quoteId),{status:409});
+  assert.deepEqual(calls,[]);
+  assert.equal(store.load().cloudSessions.mom.requestId,'original-receipt');
+  assert.equal(store.load().vmQuotes[0].used,undefined);
+  const cleaned=store.load();cleaned.cloudSessions.mom.state='stopped';store.save(cleaned);
+  assert.equal((await cloud.start('mom',quote.quoteId)).state,'ready');
+  assert.deepEqual(calls,['start']);
+  assert.equal(store.load().cloudSessions.mom.requestId,quote.quoteId);
+ }
+});
+test('unconfirmed VM recovery cannot substitute a different profile or a missing receipt',async()=>{
+ for(const session of [{phoneId:'old-profile-mom',requestId:'original-receipt'},{phoneId:'profile-mom'}]){
+  const store=storage();const cloud=new CloudVMManager({...store,env:cloudEnv,call:async()=>assert.fail('unverifiable session must not reach the provider')});
+  const s=store.load();s.cloudSessions={mom:{...session,state:'unknown'}};store.save(s);
+  await assert.rejects(cloud.diagnose('mom'),{status:409});
+  await assert.rejects(cloud.stop('mom'),{status:409});
+  assert.deepEqual(store.load().cloudSessions,s.cloudSessions);
+ }
+});
 test('VM profile mismatch cannot turn into a ready device',async()=>{
  const store=storage();const cloud=new CloudVMManager({...store,env:cloudEnv,call:async()=>ready('profile-dad')});
  await assert.rejects(cloud.start('mom',cloud.quote('mom',1).quoteId),{status:502});assert.equal(store.load().cloudSessions.mom.state,'unknown');assert.equal(phoneBinding('mom',runtimePhoneEnv(store.load(),cloudEnv)),null);
