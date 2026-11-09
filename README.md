@@ -19,7 +19,7 @@ pnpm start
 
 앱의 인증된 Node API, Letsur/Vercel AI 연결, 사용자별 기억·권한·승인, Android 실행 어댑터가 `molla-app/server`에 있습니다. [서버 설치·실행](molla-app/README.md)과 [현재 검증 범위](molla-app/docs/STATUS.md)를 확인하세요. 모델 키·개인 접속 코드·실행 DB는 각 운영 환경에서 설정합니다.
 
-실제 Letsur 및 Vercel 모델의 한국어 응답과 초안 생성은 검증했습니다. Android 화면 확인은 앱에 구현되어 있고 테스트를 통과했지만, 실제 클라우드 VM 실행은 사용자 요청에 따라 시작하지 않았습니다. 일반인의 휴대폰을 설치·동의 없이 인터넷에서 원격 제어하는 기능은 아닙니다.
+실제 Letsur·Vercel 모델의 한국어 응답과 작업 초안 생성을 검증했습니다. 저장형 엄마 Android VM 한 대에서 Letsur 계획, 소유자 승인, 설정 앱 실행, React Native Web 화면 표시와 VM 종료를 확인했습니다. 네이티브 APK/IPA 설치와 개인 휴대폰 제어는 검증하지 않았습니다. [Android 검증 기록](molla-app/docs/live/MOBILE-VERIFICATION.md)
 
 ## 독립 CLI
 
@@ -86,7 +86,7 @@ v0.2는 로컬 SQLite와 권한·실행 코어를 직접 사용합니다. 승인
 
 ### 실제 연결과 시연 범위
 
-저장소에는 정책·암호화 코드와 테스트가 있으며, Letsur와 Vercel의 실제 한국어 응답과 작업 초안 생성을 확인한 기록이 있습니다. 카카오톡 화면, 가족 역할과 구독 작업 공간은 로컬 샘플이고, 송금은 초안 또는 시뮬레이션 영수증에서 끝납니다. Android 어댑터는 구현되어 있으며 실제 클라우드 기기에서의 작업 실행과 화면 캡처는 검증 범위에 남아 있습니다. [카카오톡 데모 범위](fa-kakao-demo/README.md#llm-설정과-데모-범위) · [모바일 구현·검증 상태](molla-app/docs/STATUS.md)
+저장소에는 정책·암호화 코드와 테스트가 있으며, Letsur와 Vercel의 실제 한국어 응답과 작업 초안 생성을 확인한 기록이 있습니다. 카카오톡 화면, 가족 역할과 구독 작업 공간은 로컬 샘플이고, 송금은 초안 또는 시뮬레이션 영수증에서 끝납니다. 별도 모바일 경로에서는 저장형 클라우드 Android VM 한 대의 설정 앱 실행, 실제 화면 캡처와 종료를 확인했습니다. [카카오톡 데모 범위](fa-kakao-demo/README.md#llm-설정과-데모-범위) · [모바일 구현·검증 상태](molla-app/docs/STATUS.md)
 
 <details>
 <summary>발표 자료에서 보는 기술 흐름과 쉬운 보안 설명</summary>
