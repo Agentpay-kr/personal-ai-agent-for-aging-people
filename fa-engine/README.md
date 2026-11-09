@@ -24,7 +24,9 @@ flowchart LR
     V["vm.js<br/>계정 주인별 모의 VM"]
     K[("vault.js<br/>주인별 금고")]
     B["store.js<br/>이벤트 버스"]
-    G["memory.js<br/>family-memory/*.md"]
+    O[("ontology.js<br/>도메인 이벤트 로그<br/>해시 체인")]
+    KG["knowledge.js<br/>가족 지식 그래프<br/>보는 사람별 사실"]
+    G["memory.js<br/>family-memory/*.md 내보내기"]
   end
 
   C[("Claude API")]
@@ -45,8 +47,11 @@ flowchart LR
   V -. "로그인 세션" .-> K
   E --> B
   B --> S
-  E --> G
-  M --> G
+  E -- "record" --> O
+  M -- "record" --> O
+  O -- "투영" --> KG
+  KG -- "Markdown 사본" --> G
+  KG -- "요청자가 볼 수 있는 사실 20개" --> A
 ```
 
 **요청 하나의 흐름**: 메시지 → `agent.js`가 행동을 고름 → `engine.requestAction`(요청자는 보낸 사람으로 고정) → `policy.evaluate` →
@@ -77,7 +82,7 @@ flowchart LR
 
 ```bash
 npm install
-npm test                 # 권한 엔진 + 연결 구조 회귀 테스트 26개
+npm test                 # 권한 엔진 + 연결 구조 + 온톨로지 회귀 테스트 39개
 npm run demo             # 전체 시나리오를 터미널에서 재생
 node demo/http-smoke.js  # HTTP + SSE + 보안 검증 26개
 npm start                # API 서버: http://localhost:8787
@@ -180,10 +185,26 @@ FA 엔진은 Molla CLI **v0.1**의 HTTP 계약(`molla_session` 쿠키, `/api/sta
 - 권한은 같은 `policy.js`를 거쳐요. 동의를 철회하면 다른 가족의 요청은 403이고, 송금은 2-of-3 가족 승인이 필요해요.
 - 카톡 채팅에서 생긴 승인 요청은 Molla 작업(`source: "chat"`)으로도 보이고, 승인된 작업은 `prepared` + `evidence.kind: "local_draft"`로 끝나요.
 
-## 가족 메모리 (GBrain)
+## 가족 온톨로지 (이벤트 로그 + 지식 그래프)
 
-FA는 연결, 해지, 주문, 승인 기록을 `family-memory/*.md`에 마크다운으로 남겨요.
-`gbrain import family-memory`로 가족 전체가 하나의 메모리를 공유할 수 있어요.
+일어난 일은 모두 `ontology.js`의 도메인 이벤트(`fa:PolicyDecided`, `fa:ActionExecuted`, `fa:AccountLinked`, `fa:FactStated` …)로 한 로그에 쌓여요.
+로그는 append-only이고 해시 체인으로 묶여요. 체인은 본문 해시(payloadHash) 위에 걸려서, 잊은 기억은 본문만 지워도 `verifyChain()`이 계속 통과해요.
+
+`knowledge.js`가 로그를 가족 지식 그래프로 투영해요. 사실은 주어 · 관계 · 목적어에 출처 이벤트, 주인, 공개 범위, 버전이 붙어요.
+
+- 주인은 자기 사실을 모두 봐요. 행동에서 나온 사실(해지, 주문, 송금, 계정 연결)은 요청한 가족과 `read` 위임을 받은 가족도 봐요. 동의를 끄면 다른 가족은 못 봐요.
+- 직접 남긴 기억은 주인만 보고, Molla의 기억 공유로만 열려요. 수정하면 새 버전이 되고 이전 문구는 로그에서도 지워져요.
+- 사실은 권한이 아니에요. `policy.js`는 그래프를 읽지 않아요.
+- Agent LLM은 요청자가 볼 수 있는 사실 최근 20개를 `<family_facts>` 인용 데이터로 받아요.
+- 아이디와 비밀번호는 이벤트와 사실 어디에도 들어가지 않아요.
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/knowledge?owner=mom` | 세션 사용자가 볼 수 있는 사실 |
+| POST | `/api/knowledge/retract` `{factId}` | 주인이 사실을 잊기 (직접 남긴 기억은 Molla 기억 삭제로) |
+| GET | `/api/knowledge/verify` | 이벤트 로그 해시 체인 검사 |
+
+`family-memory/*.md`는 지식 그래프가 쓰는 GBrain 내보내기 사본이에요(`gbrain import family-memory`). 설계와 gstack 리뷰: [docs/family-ontology-plan.md](../docs/family-ontology-plan.md)
 
 ## 파일
 
@@ -193,7 +214,9 @@ src/engine.js   게이트웨이: 정책 → VM 실행, 승인·입력 대기열,
 src/agent.js    Claude 도구 사용 루프 + 데모 모드
 src/vm.js       계정 주인별 모의 VM (예시 데이터)
 src/vault.js    계정 주인별 자격 증명 금고 (값은 밖으로 나오지 않음)
-src/memory.js   GBrain용 가족 메모리
+src/ontology.js 온톨로지 어휘 + 해시 체인 도메인 이벤트 로그
+src/knowledge.js 가족 지식 그래프 (이벤트 → 사실, 보는 사람별 공개 범위)
+src/memory.js   GBrain용 Markdown 내보내기
 src/molla.js    Molla v0.1 HTTP 호환 도메인: 세션, 작업, 기억, 연락처, 동의, 온톨로지
 src/server.js   HTTP + SSE (FA 라우트 + Molla 라우트)
 client/         UI용 브라우저 클라이언트(fa-client.js)와 React 훅(useFaRoom.js)

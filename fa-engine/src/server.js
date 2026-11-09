@@ -108,6 +108,10 @@ function stream(req, res, viewer) {
 const faRoutes = [
   ['GET', /^\/api\/family$/, async () => engine.familyInfo()],
   ['GET', /^\/api\/vm\/(\w+)$/, async (a, _q, _b, [owner]) => engine.vmInfo(owner, a)],
+  // Family knowledge graph: facts the session user may see, the owner's "forget", chain check.
+  ['GET', /^\/api\/knowledge$/, async (a, q) => engine.knowledgeFor(a, q.get('owner') ?? undefined)],
+  ['POST', /^\/api\/knowledge\/retract$/, async (a, _q, b) => engine.retractFact(a, b.factId)],
+  ['GET', /^\/api\/knowledge\/verify$/, async () => engine.verifyLog()],
   ['GET', /^\/api\/rooms$/, async (a, q) => engine.listRooms(same(a, q.get('viewer') ?? undefined, 'viewer'))],
   ['POST', /^\/api\/rooms$/, async (a, _q, b) => engine.createRoom({ name: b.name, members: b.members, createdBy: same(a, b.createdBy, 'createdBy') })],
   ['GET', /^\/api\/rooms\/([\w-]+)\/messages$/, async (a, q, _b, [roomId]) => engine.roomMessages(roomId, same(a, q.get('viewer') ?? undefined, 'viewer'))],
