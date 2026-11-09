@@ -109,7 +109,8 @@ async function serveStatic(request, response, pathname) {
 
 export function createDemoServer(env = process.env) {
   const agent = createAgent(env);
-  const router = createRouter();
+  // FA_TRUST=off: money requests use the FA engine's family multisig instead of fa-trust.
+  const router = createRouter({ trust: env.FA_TRUST !== 'off' });
 
   return createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, async (request, response) => {
     response.setHeader('cache-control', 'no-store');
