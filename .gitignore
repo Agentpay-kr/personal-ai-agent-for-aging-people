@@ -10,3 +10,11 @@ test-results/
 !.env.example
 *.tsbuildinfo
 *.log
+/phone-harness/
+/rea/
+/tooling/
+/backups/
+/upstream-archives/
+__pycache__/
+*.pyc
+*.sqlite*

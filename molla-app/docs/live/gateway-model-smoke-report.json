@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "checkedAt": "2026-11-09T03:31:36.627Z",
+  "provider": "vercel",
+  "model": "openai/gpt-5-mini",
+  "scope": "Actual mobile HTTP client + actual Node API + external AI Gateway; synthetic owners, temporary DB, no VM or physical device",
+  "checks": [
+    "External AI requires synthetic owner consent; memories excluded",
+    "Mobile HTTP client → real Node server → real Gateway model → persisted Korean reply",
+    "Identical request ID reuses the response; another owner cannot read it",
+    "Real model creates a reviewable draft; no message sent or Android VM started"
+  ],
+  "responses": [
+    {
+      "kind": "conversation",
+      "reply": "좋은 아침, 오늘도 작은 기쁨들이 네 하루를 따뜻하게 채우길 바랄게.",
+      "usage": {
+        "inputTokens": 431,
+        "outputTokens": 437
+      }
+    },
+    {
+      "kind": "message-draft",
+      "body": "내일 병원에 다녀올게요. 걱정하지 마세요. 끝나고 바로 연락드릴게요.",
+      "status": "awaiting_approval",
+      "usage": {
+        "inputTokens": 504,
+        "outputTokens": 513
+      }
+    }
+  ]
+}

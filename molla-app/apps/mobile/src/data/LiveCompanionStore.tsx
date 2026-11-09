@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { AppState } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import type { Snapshot } from './types';
-import { apiRequest, ApiError, validateCredentials, type Credentials, type RuntimeStatus, type VmQuote } from '../services/runtime';
+import { apiRequest, ApiError, validateCredentials, type Credentials, type RuntimeStatus, type VmQuote, type PhoneFrame } from '../services/runtime';
 import { clearCredentials, loadCredentials, saveCredentials } from '../services/credential-storage';
 import type { PhoneAction } from '../components/RuntimePanel';
 import { demoBuild, demoCredentials, acceptRuntime } from '../services/demo-mode';
@@ -21,6 +21,7 @@ type Store = {
   setConsent: (active: boolean) => Promise<boolean>;
   phoneAction: (action: PhoneAction) => Promise<boolean>; confirmVmStart: () => Promise<boolean>; cancelVmStart: () => void;
   addContact: (input: Omit<Contact, 'id'>) => Promise<boolean>;
+  readPhoneFrame: (signal: AbortSignal) => Promise<PhoneFrame>;
 };
 const Context = createContext<Store | null>(null);
 const allowLocal = __DEV__ || process.env.EXPO_PUBLIC_ALLOW_LOCAL_API === '1';
@@ -144,6 +145,19 @@ export function LiveCompanionProvider({ children }: { children: React.ReactNode 
     await apiRequest(auth, '/phone/start', { quoteId }, { timeoutMs: 90000 });
     setNotice('Android 시작 요청을 처리했어요. 연결 상태를 확인해 주세요.');
   });
-  return <Context.Provider value={{ data, loading, busy, error, notice, draft, connected, runtime, quote, connectionUrl, setDraft, refresh, connect, disconnect, send, decide, setAIConsent, setPhonePermission, setConsent, phoneAction, confirmVmStart, cancelVmStart: () => setQuote(null), addContact }}>{children}</Context.Provider>;
+  const readPhoneFrame = useCallback(async (signal: AbortSignal) => {
+    const auth = credentials.current, started = generation.current;
+    if (!auth) throw new ApiError('내 몰라를 먼저 연결해 주세요.', 401);
+    try {
+      const frame = await apiRequest<PhoneFrame>(auth, '/phone/screen', undefined, { signal, timeoutMs: 18000 });
+      if (started !== generation.current || signal.aborted) throw new ApiError('화면 보기가 종료되었어요.');
+      if (!frame.dataUrl?.startsWith('data:image/png;base64,') || frame.dataUrl.length > 6000000 || !Number.isInteger(frame.width) || !Number.isInteger(frame.height) || frame.width < 1 || frame.height < 1 || frame.width > 4096 || frame.height > 4096 || !Number.isFinite(Date.parse(frame.capturedAt))) throw new ApiError('올바른 Android 화면을 받지 못했어요.');
+      return frame;
+    } catch (cause) {
+      if (started === generation.current && !signal.aborted && cause instanceof ApiError && cause.status === 401) handleError(cause);
+      throw cause;
+    }
+  }, [handleError]);
+  return <Context.Provider value={{ data, loading, busy, error, notice, draft, connected, runtime, quote, connectionUrl, setDraft, refresh, connect, disconnect, send, decide, setAIConsent, setPhonePermission, setConsent, phoneAction, confirmVmStart, cancelVmStart: () => setQuote(null), addContact, readPhoneFrame }}>{children}</Context.Provider>;
 }
 export function useLiveCompanion() { const value = useContext(Context); if (!value) throw new Error('LiveCompanionProvider is required'); return value; }
