@@ -1,5 +1,7 @@
 # 구현·검증 상태
 
+**이번 모바일–에이전트 업그레이드는 [`apps/api`](../apps/api/README.md)와 [별도 검증 기록](real-agent-verification.md)을 참고하세요.** 아래의 실제 ‘설정 앱’ 성공은 기존 서버 검증입니다. 새 API의 Kakao 실행·SMS 작성 완료를 입증하는 결과로 사용하지 않습니다.
+
 2026-11-09, Asia/Seoul. 노랑·검정 Yellow Buddy 앱 디자인을 유지한 실제 연결 구현이다.
 
 | 기능 | 구현·검증 |

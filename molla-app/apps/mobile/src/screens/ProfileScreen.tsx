@@ -8,6 +8,7 @@ import { useCompanion } from '../data/CompanionStore';
 import { Copy, Page } from '../components/ui';
 import { LiveControls } from '../components/LiveControls';
 import { CompanionHeader } from '../components/CompanionHeader';
+import { FamilyControls } from '../components/FamilyControls';
 
 export function ProfileScreen({ navigation }: BottomTabScreenProps<TabParams, 'Profile'>) {
   const { colors, mode, setMode } = useTheme();
@@ -20,6 +21,7 @@ export function ProfileScreen({ navigation }: BottomTabScreenProps<TabParams, 'P
     <View style={[styles.modes, { backgroundColor: colors.quiet }]}>{([{ id: 'system', label: '기기 설정', icon: Monitor }, { id: 'light', label: '밝게', icon: Sun }, { id: 'dark', label: '어둡게', icon: Moon }] as const).map(({ id, label, icon: Icon }) => <Pressable key={id} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: mode === id }} aria-checked={mode === id} onPress={() => setMode(id)} style={[styles.mode, mode === id && { backgroundColor: colors.surface }]}><Icon color={colors.ink} size={20} /><Copy variant="caption">{label}</Copy></Pressable>)}</View>
     <View style={styles.sectionHeading}><Users size={19} color={colors.ink} /><Copy variant="action">우리 가족</Copy></View>
     {data.members.map(member => <View key={member.id} style={[styles.member, { borderBottomColor: colors.line }]}><View style={[styles.initial, { backgroundColor: member.id === data.me.id ? colors.accent : colors.quiet }]}><Copy variant="action">{member.initial}</Copy></View><View style={{ flex: 1 }}><Copy variant="action">{member.name}{member.id === data.me.id ? ' · 내 공간' : ''}</Copy><Copy variant="caption" muted>{member.consent === 'active' ? '몰라와 함께하는 중' : '수락을 기다려요'}</Copy></View>{member.id === data.me.id && <Check size={18} color={colors.success} />}</View>)}
+    <FamilyControls />
     <LiveControls />
   </ScrollView></KeyboardAvoidingView></Page>;
 }

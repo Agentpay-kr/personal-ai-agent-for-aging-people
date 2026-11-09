@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { DomainError, bounded } from './core.mjs';
 const run = promisify(execFile);
 export const PHONE_APPS=Object.freeze({settings:{name:'설정',package:'com.android.settings'},browser:{name:'Chrome',package:'com.android.chrome'},kakao:{name:'카카오톡',package:'com.kakao.talk'},coupang:{name:'쿠팡',package:'com.coupang.mobile'},calendar:{name:'캘린더',package:'com.google.android.calendar'}});
-export function adbPath(env=process.env){const local=resolve(import.meta.dirname,'../.tools/platform-tools/adb.exe');return env.MOLLA_ADB&&env.MOLLA_ADB!=='adb'?env.MOLLA_ADB:existsSync(local)?local:'adb';}
+export function adbPath(env=process.env){const candidates=[resolve(import.meta.dirname,'../.tools/platform-tools/adb.exe'),resolve(import.meta.dirname,'../../molla-app/.tools/platform-tools/adb.exe')];return env.MOLLA_ADB&&env.MOLLA_ADB!=='adb'?env.MOLLA_ADB:candidates.find(existsSync)||'adb';}
 
 export function phoneBinding(actor,env=process.env){
  let bindings={};try{bindings=JSON.parse(env.MOLLA_PHONE_BINDINGS||'{}');}catch{throw new DomainError('서버의 기기 연결 설정을 확인해 주세요.',503);}
@@ -29,7 +29,7 @@ export function composeCommand(action){
 }
 export class AndroidComposeExecutor {
  constructor(owner,{env=process.env,runner=run,getEnv=()=>env}={}){this.owner=owner;this.env=env;this.getEnv=getEnv;this.runner=runner;}
- async execute(action,{authorize=()=>{}}={}){
+ async execute(action,{authorize=()=>{},beforeEffect=authorize,verifying=()=>{}}={}){
   const env=this.getEnv(),binding=phoneBinding(this.owner,env),compose=action.type==='message.draft'&&action.execution==='android-compose',open=action.type==='app.open'&&action.execution==='android-app'&&Object.hasOwn(PHONE_APPS,action.appId);
   if((compose?env.MOLLA_ALLOW_ANDROID_COMPOSE!=='1':env.MOLLA_ALLOW_ANDROID_APPS!=='1')||!binding||(!compose&&!open)||JSON.stringify(binding)!==JSON.stringify(action.device))throw new DomainError('기기 설정이 바뀌었거나 실행 기능이 꺼져 있어요.',403);
   const options={timeout:15000,maxBuffer:64000,windowsHide:true};
@@ -39,8 +39,10 @@ export class AndroidComposeExecutor {
   if(open){const {stdout}=await this.runner(adb,['-s',binding.serial,'shell',`cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${PHONE_APPS[action.appId].package}`],options);component=stdout.trim().split(/\r?\n/).at(-1);if(!/^[A-Za-z0-9_.]+\/[A-Za-z0-9_.$]+$/.test(component)||component.split('/')[0]!==PHONE_APPS[action.appId].package)throw new DomainError('이 실행 공간에 해당 앱이 설치되어 있지 않아요.',409);}
   authorize(); // Recheck after the asynchronous connection probe, immediately before the side effect.
   const latest=this.getEnv();if(JSON.stringify(phoneBinding(this.owner,latest))!==JSON.stringify(binding)||(compose?latest.MOLLA_ALLOW_ANDROID_COMPOSE!=='1':latest.MOLLA_ALLOW_ANDROID_APPS!=='1'))throw new DomainError('기기 연결이나 허용 설정이 변경되었어요.',403);
+  beforeEffect();
   const {stdout,stderr}=await this.runner(adb,['-s',binding.serial,'shell',compose?composeCommand(action):`am start -W -n ${shellQuote(component)}`],options);
   if(!/Status:\s*ok/i.test(stdout)||/Error:|Exception/i.test(stdout+'\n'+stderr))throw new DomainError('요청한 앱 화면을 열지 못했어요.',503);
+  verifying();
   if(open){
    const {stdout:foreground}=await this.runner(adb,['-s',binding.serial,'shell','dumpsys activity activities'],options);
    const pkg=PHONE_APPS[action.appId].package;const verified=foreground.split(/\r?\n/).some(line=>/mResumedActivity|topResumedActivity/.test(line)&&line.includes(pkg+'/'));

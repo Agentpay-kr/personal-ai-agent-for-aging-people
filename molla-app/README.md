@@ -1,5 +1,7 @@
 # Molla 앱과 실제 연결 서버
 
+**새 모바일 운영 API는 [`apps/api`](apps/api/README.md)입니다.** 만료·철회 가능한 사용자 인증, 사용자별 SQLite, CLI 정책 재사용, 엄격한 LLM 도구 호출과 작업 해시 승인을 제공합니다. 실행·환경변수·검증 상태는 [새 API 안내](apps/api/README.md)와 [실검증 기록](docs/real-agent-verification.md)을 먼저 확인하세요. 아래 `server/index.mjs` 안내는 이전 UI/서버 호환 실행 경로입니다.
+
 주 제품은 `apps/mobile`의 React Native·Expo 앱이다. `server`의 Node API가 개인 접속 코드, 가족별 데이터, AI 처리 동의, 작업 승인 및 Android 실행을 검사한다. 기존 루트 `src`의 Vite 화면과 `server/demo.mjs` 촬영 환경은 별도로 남아 있다.
 
 ## 현재 가능한 것
