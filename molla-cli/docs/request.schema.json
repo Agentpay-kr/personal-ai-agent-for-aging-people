@@ -320,6 +320,11 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 64
+            },
+            "ownerToken": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             }
           },
           "required": [
@@ -652,6 +657,11 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100
+            },
+            "ownerToken": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             }
           },
           "required": [
@@ -765,6 +775,11 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 24
+            },
+            "ownerToken": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             }
           },
           "required": [
@@ -977,6 +992,11 @@
             },
             "ownerConfirmed": {
               "const": true
+            },
+            "ownerToken": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             }
           },
           "required": [
@@ -1016,6 +1036,11 @@
             },
             "ownerConfirmed": {
               "const": true
+            },
+            "ownerToken": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             }
           },
           "required": [

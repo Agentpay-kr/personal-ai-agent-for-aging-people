@@ -6,6 +6,9 @@ import { asCliError } from '../lib/errors.mjs';
 import { capabilities } from '../lib/operations.mjs';
 function parse(argv){const words=[],flags={};for(let i=0;i<argv.length;i++){if(argv[i].startsWith('--')){const values=argv[i].slice(2).split('='),name=values.shift();if(!name||Object.hasOwn(flags,name))throw new CliError(`Invalid/duplicate option: ${name}`);if(values.length)flags[name]=values.join('=');else if(argv[i+1]!==undefined&&!argv[i+1].startsWith('--'))flags[name]=argv[++i];else flags[name]=true;}else words.push(argv[i]);}return {words,flags};}
 const camel=v=>v.replace(/-([a-z])/g,(_,c)=>c.toUpperCase());
+// Everything this process creates (SQLite DB, WAL/SHM, session files) is private to the OS user.
+process.umask(0o077);
+const interactive=()=>Boolean(process.stdin.isTTY&&process.stderr.isTTY);
 const output=v=>process.stdout.write(JSON.stringify(v)+'\n');
 const envelope=(operation,data,request_id)=>({schema_version:'1.0',ok:true,operation,...(request_id?{request_id}:{}),data});
 let operation='unknown',requestId,client;
@@ -19,9 +22,12 @@ node bin/molla.mjs demo login --actor mom --db .local/molla.sqlite --session .lo
 node bin/molla.mjs task create --text "쌀 10kg 주문해줘" --session .local/mom.json
 node bin/molla.mjs task get --id TASK_ID --session .local/mom.json
 node bin/molla.mjs task decide --id TASK_ID --decision approve --owner-confirmed --expected-action-hash HASH --session .local/mom.json
+  (in a terminal: type back the code shown; from the owner's app: add --owner-token TOKEN)
+node bin/molla.mjs owner token --for task.decide --id TASK_ID --session .local/mom.json   (host app only, needs MOLLA_OWNER_KEY)
 node bin/molla.mjs task execute --id TASK_ID --session .local/mom.json
 node bin/molla.mjs route --input - --session .local/mom.json
 Global options: --db FILE --session FILE
+demo login needs an interactive terminal or MOLLA_ALLOW_DEMO_LOGIN=1 (test setups only).
 No serve, base-url, port or browser options. Local demo profiles are not production authentication.
 Exit codes: 0 command success, 2 usage, 3 session, 4 forbidden/owner decision, 5 runtime.
 `);process.exit(0);}
@@ -30,7 +36,18 @@ Exit codes: 0 command success, 2 usage, 3 session, 4 forbidden/owner decision, 5
  if(operation==='capabilities'){if(Object.keys(flags).length)throw new CliError('capabilities takes no options');output(envelope(operation,capabilities()));}
  else{
   client=new Client({db:flags.db,session:flags.session});
-  if(operation==='demo.login'){for(const f of Object.keys(flags))if(!['db','session','actor'].includes(f))throw new CliError(`Unknown option: ${f}`);output(envelope(operation,await client.login(flags.actor)));}
+  if(operation==='demo.login'){
+   for(const f of Object.keys(flags))if(!['db','session','actor'].includes(f))throw new CliError(`Unknown option: ${f}`);
+   // A router (no TTY) must not mint a session for another family member.
+   if(process.env.MOLLA_ALLOW_DEMO_LOGIN!=='1'&&!interactive())throw new CliError('demo login needs an interactive terminal (or MOLLA_ALLOW_DEMO_LOGIN=1 in a test setup).','FORBIDDEN',4);
+   output(envelope(operation,await client.login(flags.actor)));
+  }
+  else if(operation==='owner.token'){
+   // For the owner's own app only. Not reachable through `route`; needs MOLLA_OWNER_KEY.
+   if(typeof flags.for!=='string')throw new CliError('owner token requires --for OPERATION');
+   const args={};for(const [k,v] of Object.entries(flags)){if(['db','session','for'].includes(k))continue;args[camel(k)]=v;}
+   output(envelope(operation,await client.ownerToken(flags.for,args)));
+  }
   else{
    let args={};
    if(operation==='route'){

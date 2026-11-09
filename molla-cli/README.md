@@ -26,8 +26,15 @@ node bin/molla.mjs task get --id TASK_ID --session .local/mom.json
 
 `task get`의 정확한 action/수신자/기기를 주인에게 보여주고 결정받은 뒤 출력된 hash를 전달합니다. 승인 비교와 기록은 한 SQLite 트랜잭션에서 처리합니다.
 
+**승인은 주인 증명이 있어야 해요.** `--owner-confirmed`는 의사 표시일 뿐이고, 다음 둘 중 하나가 필요해요. 라우터(LLM)는 둘 다 할 수 없어요.
+
+- 터미널에서 직접 실행: 화면에 뜬 일회용 코드를 입력
+- 주인 앱: `MOLLA_OWNER_KEY`를 가진 주인 앱이 `owner token --for task.decide --id TASK_ID`로 그 작업과 action hash에만 묶인 5분짜리 토큰을 받아 `--owner-token`으로 전달
+
+동의 켜기, 권한 범위 변경, 기억 공유, 연락처 추가도 같은 규칙이에요. 동의 철회, 거절, 취소는 증명 없이 가능해요.
+
 ```sh
-node bin/molla.mjs task decide --id TASK_ID --decision approve --owner-confirmed --expected-action-hash HASH --session .local/mom.json
+node bin/molla.mjs task decide --id TASK_ID --decision approve --owner-confirmed --expected-action-hash HASH --session .local/mom.json   # 터미널: 코드 입력 / 주인 앱: --owner-token TOKEN 추가
 node bin/molla.mjs task execute --id TASK_ID --session .local/mom.json
 node bin/molla.mjs task get --id TASK_ID --session .local/mom.json
 ```
@@ -46,7 +53,7 @@ node bin/molla.mjs task get --id TASK_ID --session .local/mom.json
 node bin/molla.mjs route --input examples/request.json --db .local/molla.sqlite --session .local/mom.json
 ```
 
-`--input -`는 stdin을 사용합니다. `docs/router-example.mjs`의 인자 배열 호출로 연결하세요. DB·세션·CLI 경로는 모델 출력에서 받지 않습니다. 허용되지 않은 operation/argument와 임의 shell 명령은 거부합니다. `request_id`는 추적용으로, 작업 생성의 중복 실행 방지 키가 아닙니다.
+`--input -`는 stdin을 사용합니다. `docs/router-example.mjs`의 인자 배열 호출로 연결하세요. DB·세션·CLI 경로는 모델 출력에서 받지 않습니다. 라우터용 런처(`skills/molla-router/scripts/molla.mjs`)는 `capabilities`, `health`, `route --input -`만 실행하고, DB·세션은 호스트가 정한 `MOLLA_CLI_DB`·`MOLLA_SESSION_FILE`에서만 읽어요. `demo login`은 터미널이나 `MOLLA_ALLOW_DEMO_LOGIN=1`(테스트용)에서만 돼요. 허용되지 않은 operation/argument와 임의 shell 명령은 거부합니다. `request_id`는 추적용으로, 작업 생성의 중복 실행 방지 키가 아닙니다.
 
 ## Android VM
 
@@ -72,6 +79,6 @@ node --test tests/*.test.mjs
 node scripts/package-handoff.mjs
 ```
 
-15개 테스트에는 웹 호출·서버 listener를 금지한 독립 패키지 실행, 원자적 승인, 동시 실행, 타인 작업·기억 접근 거부가 포함됩니다. 배포 폴더와 ZIP에는 세션, DB, 비밀 설정을 넣지 않습니다.
+25개 테스트에는 웹 호출·서버 listener를 금지한 독립 패키지 실행, 원자적 승인, 동시 실행, 타인 작업·기억 접근 거부, 그리고 [보안 회귀 테스트](tests/security.test.mjs) 10개(라우터 단독 승인 차단, 주인 토큰 바인딩, 런처 제한, DB 권한, 세션 심볼릭 링크, 배포 패키지 검사)가 포함됩니다. 배포 스크립트는 숨김 폴더를 건너뛰고, 세션·DB·비밀 파일이 보이면 빌드를 멈춰요. 보안 점검 내용은 [SECURITY.md](SECURITY.md)에 있어요.
 
 v0.1의 `serve`, `--base-url`, `--port`, HTTP 쿠키 transport는 v0.2에서 제거되었습니다. 기존 v0.1 세션은 새 CLI 프로필로 다시 만들어야 합니다.
