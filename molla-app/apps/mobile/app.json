@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "몰라",
+    "slug": "molla-companion",
+    "scheme": "molla",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "bundler": "metro",
+      "name": "몰라 — 내 곁의 작은 AI"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store"
+    ]
+  }
+}

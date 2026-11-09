@@ -1,0 +1,590 @@
+{
+  "passed": true,
+  "surface": "React Native Web at mobile viewports; authenticated API fixture. No real AI/VM calls.",
+  "checks": [
+    "Explore filter and draft handoff work",
+    "Chat send preserves the real API/store flow with intercepted fixture",
+    "Drawer navigation, empty state, light/dark selection work"
+  ],
+  "contrasts": [
+    {
+      "theme": "light",
+      "fg": "ink",
+      "bg": "canvas",
+      "ratio": 17.76
+    },
+    {
+      "theme": "light",
+      "fg": "ink",
+      "bg": "quiet",
+      "ratio": 16.14
+    },
+    {
+      "theme": "light",
+      "fg": "muted",
+      "bg": "canvas",
+      "ratio": 5.57
+    },
+    {
+      "theme": "light",
+      "fg": "muted",
+      "bg": "quiet",
+      "ratio": 5.07
+    },
+    {
+      "theme": "light",
+      "fg": "accentInk",
+      "bg": "accent",
+      "ratio": 13.72
+    },
+    {
+      "theme": "light",
+      "fg": "onAction",
+      "bg": "action",
+      "ratio": 17.76
+    },
+    {
+      "theme": "light",
+      "fg": "danger",
+      "bg": "surface",
+      "ratio": 6.39
+    },
+    {
+      "theme": "dark",
+      "fg": "ink",
+      "bg": "canvas",
+      "ratio": 17.18
+    },
+    {
+      "theme": "dark",
+      "fg": "ink",
+      "bg": "quiet",
+      "ratio": 13.57
+    },
+    {
+      "theme": "dark",
+      "fg": "muted",
+      "bg": "canvas",
+      "ratio": 8.74
+    },
+    {
+      "theme": "dark",
+      "fg": "muted",
+      "bg": "quiet",
+      "ratio": 6.91
+    },
+    {
+      "theme": "dark",
+      "fg": "accentInk",
+      "bg": "accent",
+      "ratio": 13.72
+    },
+    {
+      "theme": "dark",
+      "fg": "onAction",
+      "bg": "action",
+      "ratio": 13.72
+    },
+    {
+      "theme": "dark",
+      "fg": "danger",
+      "bg": "surface",
+      "ratio": 9.19
+    }
+  ],
+  "targets": [
+    {
+      "screen": "chat-390",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "최근 답변 읽어주기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "메시지 보내기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "대화",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 80.5,
+          "height": 58
+        }
+      ]
+    },
+    {
+      "screen": "explore-390",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "나의 몰라 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "추천",
+          "width": 77.5,
+          "height": 88
+        },
+        {
+          "label": "일상",
+          "width": 77.5,
+          "height": 88
+        },
+        {
+          "label": "가족",
+          "width": 77.5,
+          "height": 88
+        },
+        {
+          "label": "휴대폰",
+          "width": 77.5,
+          "height": 88
+        },
+        {
+          "label": "내일 일정, 가볍게 정리해요. 대화 시작하기",
+          "width": 346,
+          "height": 148
+        },
+        {
+          "label": "가족에게 안부를 전해요. 대화 시작하기",
+          "width": 346,
+          "height": 148
+        },
+        {
+          "label": "휴대폰 사용이 궁금할 때. 대화 시작하기",
+          "width": 346,
+          "height": 148
+        },
+        {
+          "label": "대화",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 80.5,
+          "height": 58
+        }
+      ]
+    },
+    {
+      "screen": "chat-360",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "최근 답변 읽어주기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "메시지 보내기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "대화",
+          "width": 73,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 73,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 73,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 73,
+          "height": 58
+        }
+      ]
+    },
+    {
+      "screen": "explore-360",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "나의 몰라 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "추천",
+          "width": 70,
+          "height": 88
+        },
+        {
+          "label": "일상",
+          "width": 70,
+          "height": 88
+        },
+        {
+          "label": "가족",
+          "width": 70,
+          "height": 88
+        },
+        {
+          "label": "휴대폰",
+          "width": 70,
+          "height": 88
+        },
+        {
+          "label": "내일 일정, 가볍게 정리해요. 대화 시작하기",
+          "width": 316,
+          "height": 148
+        },
+        {
+          "label": "가족에게 안부를 전해요. 대화 시작하기",
+          "width": 316,
+          "height": 148
+        },
+        {
+          "label": "휴대폰 사용이 궁금할 때. 대화 시작하기",
+          "width": 316,
+          "height": 148
+        },
+        {
+          "label": "대화",
+          "width": 73,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 73,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 73,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 73,
+          "height": 58
+        }
+      ]
+    },
+    {
+      "screen": "chat-320",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "최근 답변 읽어주기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "메시지 보내기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "대화",
+          "width": 63,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 63,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 63,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 63,
+          "height": 58
+        }
+      ]
+    },
+    {
+      "screen": "explore-320",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "나의 몰라 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "추천",
+          "width": 60,
+          "height": 88
+        },
+        {
+          "label": "일상",
+          "width": 60,
+          "height": 88
+        },
+        {
+          "label": "가족",
+          "width": 60,
+          "height": 88
+        },
+        {
+          "label": "휴대폰",
+          "width": 60,
+          "height": 88
+        },
+        {
+          "label": "내일 일정, 가볍게 정리해요. 대화 시작하기",
+          "width": 276,
+          "height": 148
+        },
+        {
+          "label": "가족에게 안부를 전해요. 대화 시작하기",
+          "width": 276,
+          "height": 148
+        },
+        {
+          "label": "대화",
+          "width": 63,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 63,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 63,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 63,
+          "height": 58
+        }
+      ]
+    },
+    {
+      "screen": "drawer-390",
+      "targets": [
+        {
+          "label": "메뉴 닫기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "대화",
+          "width": 300,
+          "height": 64
+        },
+        {
+          "label": "둘러보기",
+          "width": 300,
+          "height": 64
+        },
+        {
+          "label": "부탁한 일",
+          "width": 300,
+          "height": 64
+        },
+        {
+          "label": "나의 몰라",
+          "width": 300,
+          "height": 64
+        }
+      ]
+    },
+    {
+      "screen": "tasks-390",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "나의 몰라 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "몰라에게 부탁하기",
+          "width": 342,
+          "height": 60
+        },
+        {
+          "label": "대화",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 80.5,
+          "height": 58
+        }
+      ]
+    },
+    {
+      "screen": "profile-390",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "나의 몰라 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "기기 설정",
+          "width": 108.65625,
+          "height": 66
+        },
+        {
+          "label": "밝게",
+          "width": 108.671875,
+          "height": 66
+        },
+        {
+          "label": "어둡게",
+          "width": 108.671875,
+          "height": 66
+        },
+        {
+          "label": "연결 상태 새로고침",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "대화",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 80.5,
+          "height": 58
+        }
+      ]
+    },
+    {
+      "screen": "chat-dark-390",
+      "targets": [
+        {
+          "label": "메뉴 열기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "최근 답변 읽어주기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "메시지 보내기",
+          "width": 48,
+          "height": 48
+        },
+        {
+          "label": "대화",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "둘러보기",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "부탁",
+          "width": 80.5,
+          "height": 58
+        },
+        {
+          "label": "나의 몰라",
+          "width": 80.5,
+          "height": 58
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "iOS/Android native bundles exported; physical device, native keyboard, VoiceOver/TalkBack not exercised."
+  ]
+}

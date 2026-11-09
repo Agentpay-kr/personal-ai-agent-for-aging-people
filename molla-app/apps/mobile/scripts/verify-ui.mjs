@@ -1,0 +1,74 @@
+import { createRequire } from 'node:module';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const require = createRequire(new URL('../package.json', import.meta.url));
+const { chromium, expect } = require('@playwright/test');
+const output = fileURLToPath(new URL('../../../docs/design/screenshots', import.meta.url));
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ channel: process.env.MOLLA_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined), headless: true });
+const failures = [];
+try {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, reducedMotion: 'reduce', colorScheme: 'light' });
+  const page = await context.newPage();
+  page.on('pageerror', error => failures.push(error.message));
+  await page.goto(process.env.MOLLA_PREVIEW_URL || 'http://127.0.0.1:4321', { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await expect(page.getByTestId('start-conversation')).toBeVisible({ timeout: 120000 });
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: path.join(output, 'mobile-home-390.png') });
+  await page.getByTestId('start-conversation').click();
+  await expect(page.getByTestId('message-input')).toBeVisible();
+  await page.screenshot({ path: path.join(output, 'mobile-chat-empty-390.png') });
+  await page.getByTestId('message-input').fill('내일 병원 일정 정리해줘');
+  await page.getByTestId('send-message').click();
+  await expect(page.getByRole('button', { name: '부탁 내용 확인하기' })).toBeVisible();
+  await page.screenshot({ path: path.join(output, 'mobile-chat-390.png') });
+  await page.getByRole('button', { name: '부탁 내용 확인하기' }).click();
+  await expect(page.getByRole('button', { name: '좋아요, 초안 준비해 줘' })).toBeVisible();
+  await page.screenshot({ path: path.join(output, 'mobile-task-review-390.png') });
+  await page.getByRole('button', { name: '좋아요, 초안 준비해 줘' }).click();
+  await expect(page.getByText('초안 준비 완료', { exact: true })).toBeVisible();
+  await expect(page.getByText(/외부 앱에서 실행하거나 전송하지 않았어요/)).toBeVisible();
+  await page.getByRole('button', { name: '확인했어요' }).click();
+  await page.evaluate(() => { window.__mollaTabContinuity = true; });
+  await page.getByTestId('nav-profile').click();
+  if (!await page.evaluate(() => window.__mollaTabContinuity)) failures.push('Tab navigation reloaded the document');
+  await page.getByRole('radio', { name: '어둡게' }).click();
+  await page.getByTestId('nav-chat').click();
+  await page.screenshot({ path: path.join(output, 'mobile-chat-dark-390.png') });
+  await page.getByTestId('nav-home').click();
+  await page.screenshot({ path: path.join(output, 'mobile-home-dark-390.png') });
+  await page.getByTestId('nav-profile').click();
+  await page.getByRole('radio', { name: '밝게' }).click();
+  await page.getByTestId('nav-home').click();
+  for (const viewport of [{ width: 375, height: 667 }, { width: 360, height: 800 }, { width: 844, height: 390 }, { width: 820, height: 1180 }]) {
+    await page.setViewportSize(viewport);
+    await page.screenshot({ path: path.join(output, `mobile-home-${viewport.width}x${viewport.height}.png`) });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+    if (overflow) failures.push(`Horizontal overflow at ${viewport.width}x${viewport.height}`);
+    await page.getByTestId('nav-chat').click();
+    await expect(page.getByTestId('message-input')).toBeVisible();
+    await page.screenshot({ path: path.join(output, `mobile-chat-${viewport.width}x${viewport.height}.png`) });
+    await page.getByTestId('nav-home').click();
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId('nav-chat').click();
+  await page.getByTestId('message-input').fill('글자가 길어져도 편하게 읽고 보낼 수 있는지 확인하는 대화예요. '.repeat(9));
+  await page.screenshot({ path: path.join(output, 'mobile-chat-long-draft.png') });
+  await page.getByTestId('send-message').click();
+  await expect(page.getByTestId('message-input')).toHaveValue('');
+  await page.reload();
+  await expect(page.getByTestId('message-input')).toBeVisible();
+  await expect(page.getByText(/지금은 화면을 살펴보는 체험 대화예요/).last()).toBeVisible();
+  await page.getByTestId('nav-tasks').click();
+  await expect(page.getByText('초안 준비 완료', { exact: true })).toBeVisible();
+  await page.screenshot({ path: path.join(output, 'mobile-tasks-390.png') });
+  const report = { surface: 'React Native Web / Edge mobile viewport (not a native simulator)', screenshots: output, passed: failures.length === 0, failures, checks: ['home → conversation', 'send → manual review → local draft', 'no external execution claim', 'persistent demo conversation', 'dark theme', '360/375/390 phone, landscape, tablet', 'long multiline draft', 'reduced motion enabled'] };
+  await writeFile(path.join(output, '../ui-report.json'), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
+  if (failures.length) process.exitCode = 1;
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+} finally { await browser.close(); }
