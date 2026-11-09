@@ -11,7 +11,7 @@ import { evaluate, approvalState, ACTIONS } from './policy.js';
 import { nameOf, polish, getMember } from './family.js';
 import { connections } from './vault.js';
 import { vmState, won, appendVmLog } from './vm.js';
-import { remember as rememberNote, logDecision } from './memory.js';
+import { record } from './ontology.js';
 
 export class MollaError extends Error {
   constructor(status, message) {
@@ -155,7 +155,10 @@ export function createTask(actor, body) {
   const [policyAction, policyInput] = parsed.policy;
   const input = parsed.kind === 'transfer' ? { ...policyInput, to: parsed.action.to } : policyInput;
   const decision = evaluate(fam(), { requester: actor, owner, action: policyAction, input });
-  logDecision(`[Molla] ${N(actor)} → ${ACTIONS[policyAction].label} @ ${N(owner)}: ${decision.decision} — ${decision.reason}`);
+  record('fa:PolicyDecided', {
+    actor, onBehalfOf: owner,
+    payload: { source: 'molla', action: policyAction, actionLabel: ACTIONS[policyAction].label, decision: decision.decision, tier: decision.tier ?? null, reason: decision.reason },
+  });
   if (decision.decision === 'deny') throw new MollaError(403, decision.reason);
 
   // Molla rule: every task waits for its owner. Money also needs a family co-signer.
@@ -260,7 +263,7 @@ export async function decideTask(actor, body) {
   task.votes[actor] = decision;
   task.updatedAt = Date.now();
   const s = approvalState({ decision: { approvals: a }, votes: task.votes });
-  logDecision(`[Molla] ${N(actor)} ${decision} → ${task.id} → ${s}`);
+  record('fa:VoteCast', { actor, onBehalfOf: task.owner, payload: { source: 'molla', requestId: task.id, vote: decision, state: s } });
   if (s === 'rejected') return finish(task, 'rejected', actor);
   if (s === 'pending') return { task: viewTask(task, actor) };
 
@@ -331,7 +334,7 @@ async function runTask(task) {
   task.evidence = { kind: 'local_draft', verified: true, artifact, note, createdAt: Date.now() };
   task.status = 'prepared';
   task.updatedAt = Date.now();
-  rememberNote(N(task.owner), `[Molla] ${task.text} → 초안 준비 (요청: ${N(task.requester)})`);
+  record('fa:TaskPrepared', { actor: task.requester, onBehalfOf: task.owner, payload: { taskId: task.id, text: task.text } });
 }
 
 // ------------------------------------------------------------- memories
@@ -347,7 +350,7 @@ export function rememberMemory(actor, body) {
   const text = str(body.text, 'text', { max: 300 });
   const m = { id: nextId('mem'), owner: actor, text, sharedWith: [], createdAt: Date.now(), updatedAt: Date.now() };
   S.memories.set(m.id, m);
-  rememberNote(N(actor), `기억: ${text}`);
+  record('fa:FactStated', { actor, payload: { memoryId: m.id, text } });
   return { memory: m };
 }
 
@@ -362,12 +365,14 @@ export function correctMemory(actor, body) {
   const m = ownMemory(actor, str(body.id, 'id', { max: 100 }));
   m.text = str(body.text, 'text', { max: 300 });
   m.updatedAt = Date.now();
+  record('fa:FactCorrected', { actor, payload: { memoryId: m.id, text: m.text } });
   return { memory: m };
 }
 
 export function forgetMemory(actor, body) {
   const m = ownMemory(actor, str(body.id, 'id', { max: 100 }));
   S.memories.delete(m.id);
+  record('fa:FactRetracted', { actor, payload: { key: `memory:${m.id}` } });
   return { deleted: m.id };
 }
 
@@ -383,14 +388,20 @@ export function shareMemory(actor, body) {
   const m = ownMemory(actor, str(body.id, 'id', { max: 100 }));
   const grantee = str(body.grantee, 'grantee', { max: 100 });
   if (!member(grantee) || grantee === actor) throw new MollaError(400, '공유할 가족을 확인할 수 없어요');
-  if (!m.sharedWith.includes(grantee)) m.sharedWith.push(grantee);
+  if (!m.sharedWith.includes(grantee)) {
+    m.sharedWith.push(grantee);
+    record('fa:FactShared', { actor, payload: { memoryId: m.id, grantee } });
+  }
   return { memory: m };
 }
 
 export function revokeMemory(actor, body) {
   const m = ownMemory(actor, str(body.id, 'id', { max: 100 }));
   const grantee = str(body.grantee, 'grantee', { max: 100 });
-  m.sharedWith = m.sharedWith.filter((g) => g !== grantee);
+  if (m.sharedWith.includes(grantee)) {
+    m.sharedWith = m.sharedWith.filter((g) => g !== grantee);
+    record('fa:FactUnshared', { actor, payload: { memoryId: m.id, grantee } });
+  }
   return { memory: m };
 }
 
@@ -474,7 +485,7 @@ export function setConsent(actor, body) {
       }
     }
   }
-  logDecision(`[Molla] ${N(actor)} consent → ${value}`);
+  record('fa:ConsentChanged', { actor, payload: { value } });
   return { consent: value };
 }
 
