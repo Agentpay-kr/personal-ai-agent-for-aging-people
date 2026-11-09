@@ -1,0 +1,18 @@
+{
+  "name": "family-agent-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Family AI Agent (FA) - agent brain + family permission engine for the c0mpiled-17 Seoul demo",
+  "scripts": {
+    "start": "node src/server.js",
+    "demo": "node demo/run-scenario.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0"
+  }
+}

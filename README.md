@@ -30,6 +30,8 @@ pnpm start
 
 Node.js 24 이상에서 시작하세요. npm 설치나 웹 앱 체크아웃은 필요 없습니다.
 
+[FA 엔진](fa-engine/README.md)은 카카오톡형 단톡방 데모용 로컬 API 서버(가족 권한 엔진 + Claude 에이전트)입니다. Molla CLI v0.2는 HTTP 없이 독립 실행되므로 FA 엔진 없이도 동작합니다 (`cd fa-engine && npm install && npm start`).
+
 ```sh
 node molla-cli/bin/molla.mjs capabilities
 node molla-cli/bin/molla.mjs health
