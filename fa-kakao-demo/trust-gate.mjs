@@ -15,7 +15,7 @@ const FAMILY_EVENTS = {
   linked: '데모 은행 연결이 갱신됐어요.',
   expired: '데모 은행 연결이 만료됐어요.',
   lockdown: '송금 긴급 잠금이 켜졌어요.',
-  unlocked: '가족 두 명이 등록된 폰으로 확인해서 송금 잠금이 풀렸어요.',
+  unlocked: '가족 두 명의 기기 확인으로 송금 잠금이 풀렸어요.',
 };
 export const TRUST_ACTIONS = new Set(['trust_approve', 'trust_reject', 'trust_cancel', 'trust_scam', 'trust_skip', 'trust_unlock']);
 
@@ -121,10 +121,10 @@ export function createTrustGate() {
     if (votes.size < 2) return `${LABEL[actor]} 동의 ✓ · 가족 한 명이 더 동의하면 송금 잠금이 풀려요.`;
     const ok = await trust.unlockWith([...votes].map((id) => phones[id]));
     votes.clear();
-    if (!ok) return '잠금을 풀지 못했어요. 가족 두 명이 각자 등록된 폰으로 확인해야 해요.';
+    if (!ok) return '잠금을 풀지 못했어요. 가족 두 명이 각자 휴대폰으로 확인해야 해요.';
     ready = linkBank();
     await ready;
-    return '🔓 가족 2명이 등록된 폰으로 확인해서 송금 잠금을 풀고, 데모 은행을 새 열쇠로 다시 연결했어요.';
+    return '🔓 가족 2명이 휴대폰으로 확인해서 송금 잠금을 풀었어요. 은행도 새로 연결했어요.';
   }
 
   function snapshot(room, actor, since) {
@@ -164,7 +164,7 @@ export function createTrustGate() {
   function exclusion(r, id) {
     if (r.kind !== 'transfer') return null;
     if (r.payeeOwner && id === r.payeeOwner && id !== r.owner) return '돈을 받는 사람은 승인할 수 없어요.';
-    if (id === r.requester && id !== r.owner) return '요청한 사람은 승인할 수 없어요.';
+    if (id === r.requester && id !== r.owner) return '요청한 사람은 승인자로 셀 수 없어요.';
     return null;
   }
 
@@ -180,16 +180,16 @@ export function createTrustGate() {
         // No `audience`: the app would disable every button for non-owners. Per-button actor/actors gate it.
         kind: 'approval',
         title: `🔐 ${r.summary}`,
-        description: `돈이 나가는 요청이라 ${LABEL[owner]}가 등록된 폰으로 승인해야 해요. 가족 모두에게 보여요.`,
+        description: `돈이 나가는 요청이라 ${LABEL[owner]}의 기기 승인이 필요해요. 가족 모두에게 공개돼요.`,
         rows: [
           row('요청한 사람', LABEL[r.requester] ?? r.requester),
-          row('출금 계좌', `${LABEL[owner]}의 은행 (열쇠 3조각 중 2조각이 있어야 열림)`),
+          row('출금 계좌', `${LABEL[owner]}의 은행 (열쇠 2-of-3)`),
           row('받는 곳', r.payee ?? '-'),
           row('금액', won(r.amountKRW)),
           row('위험 등급', `${d.tier} · 승인 ${d.approvalsRequired}명`),
           ...d.signals.map((s) => row('⚠️ 신호', s.label)),
-          ...(d.coolingOffMinutes ? [row('기다리는 시간', `승인 후 ${d.coolingOffMinutes / 60}시간`)] : []),
-          ...(excluded.length ? [row('승인 불가', `${excluded.map((id) => LABEL[id]).join('·')} (요청한 사람·받는 사람)`)] : []),
+          ...(d.coolingOffMinutes ? [row('실행 지연', `승인 후 ${d.coolingOffMinutes / 60}시간`)] : []),
+          ...(excluded.length ? [row('승인 불가', `${excluded.map((id) => LABEL[id]).join('·')} (요청자·받는 사람)`)] : []),
           ...(a.approvals.length ? [row('승인 완료', a.approvals.map((id) => `${LABEL[id]} ✓`).join(', '))] : []),
         ],
         actions: [
@@ -211,11 +211,11 @@ export function createTrustGate() {
       card: {
         kind: 'blocked',
         title: '🚨 보이스피싱 의심 · 송금 보류',
-        description: `${firstLine(d.reasons)} 증거는 가족 열쇠로 잠가서 보관했어요 (3조각 중 2조각이 있어야 열려요).`,
+        description: `${firstLine(d.reasons)} 증거는 가족 2-of-3 열쇠로 봉인했어요.`,
         rows: [
           row('요청', r.summary),
           ...d.signals.map((s) => row(`⚠️ ${s.label}`, s.evidence)),
-          row('증거', a.evidenceId ? `잠가서 보관함 (${a.evidenceId.slice(0, 10)}…)` : '-'),
+          row('증거', a.evidenceId ? `봉인됨 (${a.evidenceId.slice(0, 10)}…)` : '-'),
         ],
         actions: others.length ? [
           button('trust_scam', '사기예요 · 긴급 잠금', { value: a.id, actors: others }),
@@ -243,7 +243,7 @@ export function createTrustGate() {
         title: `⏳ 실행 예약 · ${a.request.summary}`,
         description: '처음 보내는 계좌라 바로 보내지 않아요. 그 사이에 가족이 확인할 수 있어요.',
         rows: [
-          row('승인', a.approvals.map((id) => `${LABEL[id]} (등록된 폰 확인 ✓)`).join(', ')),
+          row('승인', a.approvals.map((id) => `${LABEL[id]} (휴대폰 확인 ✓)`).join(', ')),
           row('남은 시간', `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`),
         ],
         actions: [
@@ -257,7 +257,7 @@ export function createTrustGate() {
 
   function executedCard(room, a) {
     return {
-      text: `✅ ${a.request.summary} 이체를 마쳤어요 (연습). 작업 기록은 열쇠를 지워서 아무도 못 읽게 했어요.`,
+      text: `✅ ${a.request.summary} 보내기를 마쳤어요 (연습). 처리에 쓴 정보는 바로 지웠어요.`,
       card: {
         kind: 'result',
         title: `✅ 실행 완료 · ${a.request.summary}`,
@@ -277,8 +277,8 @@ export function createTrustGate() {
       card: {
         kind: 'result',
         title: '🔒 송금 긴급 잠금 완료',
-        description: '데모 은행 연결과 열쇠 조각을 지웠고, 진행 중이던 송금 요청을 모두 취소했어요.',
-        rows: [row('푸는 방법', '가족 2명이 각자 등록된 폰으로 동의'), row('가족 열쇠', '새로 만듦')],
+        description: '데모 은행 세션과 열쇠 조각을 지웠고, 진행 중이던 송금 요청을 모두 취소했어요.',
+        rows: [row('해제 조건', '가족 2명이 각자 기기로 해제'), row('가족 키', '재발급됨')],
         actions: [button('trust_unlock', '잠금 해제에 동의', { value: 'unlock', actors: family(room), variant: 'secondary' })],
       },
       visibleTo: everyone(room),
@@ -328,7 +328,7 @@ export function createTrustGate() {
 
       const a = findAction(room, value);
       if (!a) return [note(room, '이 요청을 찾을 수 없어요. 가장 최근 카드를 확인해 주세요.')];
-      if (!phones[actor]) return [note(room, '등록된 가족 폰에서만 결정할 수 있어요.')];
+      if (!phones[actor]) return [note(room, '등록된 가족 기기에서만 결정할 수 있어요.')];
       const before = a.status;
       let next = a;
       switch (action) {
@@ -340,7 +340,7 @@ export function createTrustGate() {
           if (next.status === before && ['pending', 'held'].includes(next.status)) {
             if (next.approvals.length === count) return [note(room, `이미 승인했거나 승인할 수 없는 요청이에요.`)];
             const left = Math.max(0, next.decision.approvalsRequired - next.approvals.length);
-            return [{ ...view(room, next), text: `${LABEL[actor]} 승인 ✓ (등록된 폰 확인) · ${left}명 더 승인하면 진행돼요.` }];
+            return [{ ...view(room, next), text: `${LABEL[actor]} 승인 ✓ (휴대폰 확인) · ${left}명 더 승인하면 진행돼요.` }];
           }
           break;
         }
@@ -382,7 +382,7 @@ export function createTrustGate() {
           if (trust.frozen) return { status: 409, body: { error: '송금이 이미 잠겨 있어요.' } };
           const context = trust.context(actor, 'lockdown', String(trust.keys.epoch));
           if (!trust.verifyProof(actor, phones[actor].prove(context), context)) {
-            return { status: 403, body: { error: '등록된 가족 폰에서만 송금을 잠글 수 있어요.' } };
+            return { status: 403, body: { error: '등록된 가족 기기만 송금을 잠글 수 있어요.' } };
           }
           await trust.lockdown(actor, '보안 프로필에서 송금 긴급 잠금');
           notice = '송금을 잠갔어요. 진행 중이던 송금 요청을 취소했어요.';
@@ -398,7 +398,7 @@ export function createTrustGate() {
         case 'cancel': {
           const a = findAction(room, actionId);
           if (!a || !OPEN_TRANSFERS.has(a.status)) return { status: 409, body: { error: '지금 취소할 수 있는 요청이 없어요.' } };
-          if (!canCancel(a, actor)) return { status: 403, body: { error: '승인 대기 중인 요청은 계정 주인만 취소할 수 있어요.' } };
+          if (!canCancel(a, actor)) return { status: 403, body: { error: '승인을 기다리는 요청은 본인만 취소할 수 있어요.' } };
           await trust.rejectWith(phones[actor], a.id);
           notice = '송금 요청을 취소했어요.';
           break;
@@ -410,7 +410,7 @@ export function createTrustGate() {
           const forged = phones.dad.prove(trust.context('mom', 'approve', target.id));
           await trust.approve(target.id, 'mom', forged);
           result = { requestId: target.id, status: trust.getAction(target.id)?.status };
-          notice = '등록되지 않은 폰에서 온 승인을 막았어요.';
+          notice = '등록된 기기가 아닌 승인 시도를 차단했어요.';
           break;
         }
       }

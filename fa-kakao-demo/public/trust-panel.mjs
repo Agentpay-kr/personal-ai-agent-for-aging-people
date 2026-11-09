@@ -1,10 +1,10 @@
 import { avatar, icon, people } from './visual.mjs';
 
 const eventNames = {
-  decision: '규칙 판단', family_alert: '가족 알림', approval: '폰으로 승인', scheduled: '실행 예약',
-  executed: '실행 완료', shredded: '기록 지움', evidence: '증거 보관', proof_failed: '사칭 차단',
-  lockdown: '긴급 잠금', unlocked: '잠금 해제', linked: '계정 연결', rejected: '요청 취소',
-  expired: '요청 만료', member_removed: '가족 내보냄',
+  decision: '규칙 판단', family_alert: '가족 알림', approval: '기기 승인', scheduled: '실행 예약',
+  executed: '실행 완료', shredded: '세션 폐기', evidence: '증거 봉인', proof_failed: '사칭 차단',
+  lockdown: '긴급 잠금', self_destruct: '자동 소멸', unlocked: '잠금 해제', linked: '계정 연결',
+  rejected: '요청 취소', expired: '요청 만료', member_removed: '구성원 제거',
 };
 const actionStates = { pending: '승인 대기', held: '확인 보류', scheduled: '실행 대기' };
 const displayTime = new Intl.DateTimeFormat('ko-KR', {
@@ -15,15 +15,21 @@ const esc = text => String(text ?? '').replace(/[&<>"']/g, c => ({
 })[c]);
 
 function securityStatus(snapshot, waiting) {
+  // fa-trust self-destructs on intrusion (takeover, hacking, contamination); show that apart from a lockdown.
+  const lastLock = (snapshot.events ?? []).filter(e => ['lockdown', 'self_destruct', 'unlocked'].includes(e.type)).at(-1);
+  if (snapshot.locked && lastLock?.type === 'self_destruct') return {
+    tone: 'locked', icon: 'lock', title: '외부 침해로 자동 소멸됨',
+    body: `세션과 기억을 지웠고, 남은 건 봉인된 증거와 감사 기록뿐이에요. 가족 기기 두 대가 동의하면 다시 시작해요. (${snapshot.unlockVotes ?? 0}/2)`,
+  };
   if (snapshot.locked) return {
     tone: 'locked', icon: 'lock', title: '송금 긴급 잠금 중',
-    body: `등록된 가족 폰 두 대가 동의하면 잠금이 풀려요. (${snapshot.unlockVotes ?? 0}/2)`,
+    body: `등록된 가족 기기 두 대가 동의하면 잠금이 풀려요. (${snapshot.unlockVotes ?? 0}/2)`,
   };
   if (waiting.length) return {
     tone: 'waiting', icon: 'info', title: '확인이 필요한 송금', body: '요청 상태를 확인하고 필요하면 취소할 수 있어요.',
   };
   return {
-    tone: 'ready', icon: 'shield', title: '송금 보호 켜짐', body: '승인이 필요한 송금은 등록된 가족 폰의 동의를 받아요.',
+    tone: 'ready', icon: 'shield', title: '송금 보호 켜짐', body: '승인이 필요한 송금은 등록된 가족 기기의 동의를 받아요.',
   };
 }
 
@@ -49,8 +55,8 @@ function waitingRows(actions, busy) {
 function trustFacts(snapshot) {
   const facts = [
     ['연결된 계정', snapshot.linkCount],
-    ['보관 중인 증거', snapshot.evidenceCount],
-    ['보안 기록', snapshot.audit?.count],
+    ['봉인된 증거', snapshot.evidenceCount],
+    ['감사 기록', snapshot.audit?.count],
   ].filter(([, value]) => Number.isInteger(value) && value >= 0);
   return facts.length ? `<dl class="trust-facts" aria-label="보안 요약">${facts.map(([label, value]) =>
     `<div><dt>${label}</dt><dd>${value}건</dd></div>`).join('')}</dl>` : '';
@@ -90,12 +96,12 @@ export function renderTrustProfile({roomName, canOpenChat, snapshot, busy, notic
     ${notice || (status && error) ? `<p class="trust-notice" role="status">${esc(error || notice)}</p>` : ''}
     ${status ? `<section class="trust-profile-section"><div class="trust-section-title"><h3>처리 중인 요청</h3><span>${waiting.length}건</span></div>
         ${waiting.length ? `<ul class="trust-request-list">${waitingRows(waiting,busy)}</ul>` : '<p class="trust-empty-line">처리 중인 요청이 없어요.</p>'}</section>
-      <section class="trust-profile-section"><div class="trust-section-title"><h3>최근 보안 기록</h3><span>${snapshot.audit?.verified ? '기록 이상 없음' : '기록 확인 필요'}</span></div>
+      <section class="trust-profile-section"><div class="trust-section-title"><h3>최근 보안 기록</h3><span>${snapshot.audit?.verified ? '기록이 그대로예요' : '기록을 확인해 주세요'}</span></div>
         ${recent.length ? `<ul class="trust-event-list">${recent.slice(0,3).map(eventRow).join('')}</ul>` : '<p class="trust-empty-line">이 방에 표시할 기록이 없어요.</p>'}
         ${recent.length > 3 || controls.canImpostor || facts ? `<details><summary>자세히 보기</summary>
           ${facts}
           ${recent.length > 3 ? `<ul class="trust-event-list">${recent.slice(3,10).map(eventRow).join('')}</ul>` : ''}
-          ${controls.canImpostor ? command('impostor','가짜 승인 막기 시연',busy) : ''}</details>` : ''}
-      </section><p class="trust-scope-note">데모 송금에 적용돼요. 구독 해지는 계정 주인이 따로 승인해요.</p>` : ''}
+          ${controls.canImpostor ? command('impostor','사칭 승인 차단 시연',busy) : ''}</details>` : ''}
+      </section><p class="trust-scope-note">데모 송금에 적용돼요. 구독 해지는 본인이 따로 승인해요.</p>` : ''}
     </div>${footer}`;
 }

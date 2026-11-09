@@ -93,12 +93,7 @@ const dadReq = await trust.request(dad, {
 });
 note(`상태: ${dadReq.status} · 엄마가 승인하기 전엔 절대 실행되지 않아요.`);
 
-step('사칭범이 "엄마" 이름으로 승인 버튼을 누름');
-note('새 번호 폰이 엄마인 척 승인을 보냄');
-await trust.approveWith(new MemberDevice('mom'), dadReq.id);
-note(`상태: ${dadReq.status} (승인 ${dadReq.approvals.length}명 · 엄마 승인 없음)`);
-
-step('보이스피싱: 엄마가 직접 송금을 요청');
+step('보이스피싱(사기): 엄마가 직접 송금을 요청 → 차단 + 가족 확인');
 const scamText = '검찰에서 전화 왔는데 내 계좌가 범죄에 연루됐대. 안전계좌로 300만원 옮기래. 가족한테 말하지 말래. 빨리 보내줘';
 say('엄마', scamText);
 const scam = await trust.request(mom, {
@@ -154,21 +149,33 @@ await trust.request(
   { metadata: { actor: 'mom', owner: 'mom', intent: 'transfer', channel: 'kakao', callActive: true } },
 );
 
-step('AI 심판 ②: 라우터는 "조회"로 분류했는데 송금이 올라옴 → 차단');
+step('AI 심판 ②: 규칙의 오탐을 풀어줌 (승인 절차는 그대로)');
+say('엄마', '오늘 안에 관리비 120만원 내야 해');
+const bill = await trust.request(
+  mom,
+  { owner: 'mom', kind: 'transfer', amountKRW: 1_200_000, payee: '○○아파트 관리사무소', summary: '관리비 120만원', text: '오늘 안에 관리비 120만원 내야 해' },
+  { metadata: { actor: 'mom', owner: 'mom', intent: 'transfer', confidence: 0.95 } },
+);
+
+console.log(`\n${bold(red('━━ 여기부터는 사기가 아니라 시스템 침해 (탈취·해킹·오염) → FA 자동 소멸'))}`);
+
+step('외부 침해 ① 탈취: 새 번호 폰이 "엄마" 이름으로 승인');
+await trust.linkAccount('mom', 'coupang', 'coupang-session-cookie-3');
+note(`지금: 연결 서비스 ${trust.linkedAccounts().length}개 · 가족 기억 ${(await trust.recall()).length}건 · 관리비 요청 ${bill.status}`);
+await trust.approveWith(new MemberDevice('mom'), bill.id);
+note(`소멸 후: 연결 서비스 ${trust.linkedAccounts().length}개 · 가족 기억 ${(await trust.recall()).length}건 · 관리비 요청 ${bill.status}`);
+const sealed = (await trust.openEvidence(bill.evidenceId!, [son, dad])) as { intrusions: Array<{ id: string; kind: string }> };
+note(`봉인된 증거는 남음 (아들 + 아빠로 열람): ${sealed.intrusions.map((i) => `${i.kind}/${i.id}`).join(', ')}`);
+await trust.unlockWith([mom, son]);
+
+step('외부 침해 ② 오염: 라우터는 "조회"로 분류했는데 송금이 올라옴');
 note('원문: "엄마 구독 목록 좀 보여줘" · 라우터 intent: scan');
 await trust.request(
   son,
   { owner: 'mom', kind: 'transfer', amountKRW: 900_000, payee: '하나 000-0000', summary: '90만원 송금' },
   { metadata: { actor: 'son', owner: 'mom', intent: 'scan', confidence: 0.9 }, rawData: ['엄마 구독 목록 좀 보여줘'] },
 );
-
-step('AI 심판 ③: 규칙의 오탐을 풀어줌 (승인 절차는 그대로)');
-say('엄마', '오늘 안에 관리비 120만원 내야 해');
-await trust.request(
-  mom,
-  { owner: 'mom', kind: 'transfer', amountKRW: 1_200_000, payee: '○○아파트 관리사무소', summary: '관리비 120만원', text: '오늘 안에 관리비 120만원 내야 해' },
-  { metadata: { actor: 'mom', owner: 'mom', intent: 'transfer', confidence: 0.95 } },
-);
+await trust.unlockWith([mom, son]);
 
 step('아빠가 단톡방을 나감 → 가족 키 재발급');
 const oldFamilyKey = trust.keys.familyKey();
@@ -182,10 +189,9 @@ try {
   note('나간 사람이 가진 예전 가족 키 → ❌ 새 기록 복호화 실패');
 }
 
-step('감사 로그 (해시 체인)');
+step('외부 침해 ③ 해킹: 감사 기록(해시 체인)을 몰래 고치면');
 note(`기록 ${trust.audit.entries().length}건 · 무결성: ${trust.audit.verify().ok ? green('✅ 통과') : red('❌ 실패')}`);
-const tampered = trust.audit.entries().map((e) => ({ ...e }));
-tampered[3]!.summary = '조작된 기록';
-const check = trust.audit.verify(tampered);
-note(`3번 기록을 몰래 고치면 → ${check.ok ? red('통과?! (이러면 안 됨)') : red(`❌ ${check.brokenAt}번에서 위변조 탐지`)}`);
+(trust.audit.entries()[3] as { summary: string }).summary = '조작된 기록';
+note('누군가 3번 기록을 몰래 고침 → 다음 정기 점검(tick)에서 발견');
+await trust.tick();
 console.log('');
