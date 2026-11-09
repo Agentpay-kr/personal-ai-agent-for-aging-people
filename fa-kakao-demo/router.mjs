@@ -70,6 +70,22 @@ function parseTransfer(query, actor) {
   };
 }
 
+const TRUST_CONTROLS = new Set(['lock', 'unlock', 'cancel', 'impostor']);
+const trustContext = (body) => isId(body?.demo_id) && isId(body?.room_id)
+  && MEMBERS.has(body.actor) && body.actor !== 'fa';
+
+export function validTrustRequest(body, method) {
+  if (!trustContext(body)) return false;
+  const contextFields = ['demo_id', 'room_id', 'actor'];
+  if (method === 'GET') {
+    return Object.keys(body).every((key) => [...contextFields, 'since'].includes(key))
+      && (body.since === undefined || /^\d{1,15}$/.test(body.since));
+  }
+  return Object.keys(body).every((key) => [...contextFields, 'action', 'action_id'].includes(key))
+    && TRUST_CONTROLS.has(body.action)
+    && (body.action === 'cancel' ? typeof body.action_id === 'string' && /^req_[0-9a-f]{12}$/.test(body.action_id) : body.action_id === undefined);
+}
+
 function intent(text, actor) {
   const query = stripFaMention(text);
   if (/송금|이체|계좌.*(?:옮겨|보내)/.test(query)) return { action: 'transfer', transfer: parseTransfer(query, actor) };
@@ -134,15 +150,20 @@ function replyMany(room, items) {
 }
 
 // Money requests and trust buttons go to fa-trust. Returns a Promise, or null to fall through.
-function routeTrust(room, gate, { actor, action, value }) {
-  if (!gate) return null;
-  if (action === 'chat' && isMoneyRequest(value)) {
-    return gate.fromChat(room, actor, value).then((items) => replyMany(room, items));
-  }
-  if (TRUST_ACTIONS.has(action)) {
-    return gate.button(room, actor, action, value).then((items) => replyMany(room, items));
-  }
-  return null;
+function routeTrust(room, demo, { room_id, actor, action, value }) {
+  const isTransfer = action === 'chat' && isMoneyRequest(value);
+  if (!demo.trust || (!isTransfer && !TRUST_ACTIONS.has(action))) return null;
+  return queueTrust(demo, async () => {
+    if (demo.rooms.get(room_id) !== room) return null;
+    const items = isTransfer ? await demo.trust.fromChat(room, actor, value) : await demo.trust.button(room, actor, action, value);
+    return replyMany(room, items);
+  });
+}
+
+function queueTrust(demo, action) {
+  const result = demo.trustQueue.then(action);
+  demo.trustQueue = result.catch(() => {});
+  return result;
 }
 
 function row(label, detail) {
@@ -456,18 +477,33 @@ export function createRouter({ trust: useTrust = true } = {}) {
   const demos = new Map();
   const demoOf = (demo_id) => {
     if (!demos.has(demo_id)) {
-      demos.set(demo_id, { vm: createDemoVmAgent(), rooms: new Map(), trust: useTrust ? createTrustGate() : null });
+      demos.set(demo_id, {
+        vm: createDemoVmAgent(), rooms: new Map(),
+        trust: useTrust ? createTrustGate() : null, trustQueue: Promise.resolve(),
+      });
     }
     return demos.get(demo_id);
   };
   return {
-    // fa-trust gate for this demo (null when fa-trust is not available).
-    trust(demo_id) {
-      return demoOf(demo_id).trust;
+    async trustProfile({ demo_id, room_id, actor, since, action, action_id }) {
+      const demo = demos.get(demo_id);
+      const room = demo?.rooms.get(room_id);
+      const notFound = { status: 404, body: { error: '이 방에서 FA를 먼저 불러 주세요.' } };
+      if (!room) return notFound;
+      if (!Object.hasOwn(LABEL, actor) || !room.members.includes(actor)) {
+        return { status: 403, body: { error: '이 방에 참여한 등록 가족만 보안 프로필을 볼 수 있어요.' } };
+      }
+      if (!demo.trust) return { status: 200, body: { enabled: false } };
+      return queueTrust(demo, async () => {
+        if (demo.rooms.get(room_id) !== room) return notFound;
+        if (action) return demo.trust.control(room, actor, action, action_id);
+        return { status: 200, body: await demo.trust.profile(room, actor, Number(since || 0)) };
+      });
     },
     handle(command) {
       const { demo_id, room_id, members, action } = command;
-      const { vm, rooms, trust } = demoOf(demo_id);
+      const demo = demoOf(demo_id);
+      const { vm, rooms, trust } = demo;
       const signature = members.toSorted().join(',');
       if (!rooms.has(room_id)) {
         const room = { members, signature, connections: new Map() };
@@ -478,9 +514,10 @@ export function createRouter({ trust: useTrust = true } = {}) {
       if (!room || room.signature !== signature) return null;
       if (action === 'retire') {
         rooms.set(room_id, null);
+        trust?.retire(room);
         return reply(room);
       }
-      return routeTrust(room, trust, command) ?? routeRoom(room, vm, command);
+      return routeTrust(room, demo, command) ?? routeRoom(room, vm, command);
     },
   };
 }

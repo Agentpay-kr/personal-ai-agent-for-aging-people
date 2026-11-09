@@ -1,6 +1,8 @@
 import { avatar, groupAvatar, icon, people } from './visual.mjs';
 import { faMention, mentionsFa } from './mentions.mjs';
 import { canSee, isCurrentCard } from './scenario.mjs';
+import { PERSON_PROFILE_WIDTH, PERSON_PROFILE_HEIGHT, renderPersonProfile } from './person-profile.mjs';
+import { renderTrustProfile } from './trust-panel.mjs';
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
@@ -12,6 +14,8 @@ const contacts = ['mom', 'dad', 'son', 'aunt', 'friend'];
 const clock = () => new Intl.DateTimeFormat('ko-KR', {hour:'numeric', minute:'2-digit', hour12:true, timeZone:'Asia/Seoul'}).format(new Date());
 const seed = (by, text, time) => ({by, text, time});
 const makeRoom = (id, name, members, messages = []) => ({id, name, members, messages, settings:{}, routerId:crypto.randomUUID()});
+const faBusy = `${label('fa')}는 이미 다른 채팅방에 참여 중이에요.`;
+const hasFA = item => item.members.includes('fa');
 
 function rotateRouter(item) {
   item.routerId = crypto.randomUUID();
@@ -21,8 +25,13 @@ function rotateRouter(item) {
   }
 }
 
+function detachFA(item) {
+  rotateRouter(item);
+  item.members = item.members.filter(id => id !== 'fa');
+}
+
 function initial() {
-  return {actor:'son', active:'family', routerDemoId:crypto.randomUUID(), rooms:[
+  return {actor:'son', active:'family', routerDemoId:crypto.randomUUID(), deletedRoomIds:[], rooms:[
     makeRoom('family', '우리 가족', ['son','mom','dad'], [
       seed('mom', '요즘 어디에 뭘 구독했는지 모르겠네.\n휴대폰으로 매달 결제 문자가 여러 개 와.', '오전 11:08'),
       seed('son', '엄마, 다음에 갈 때까지 기다리지 말고\n여기서 같이 정리해 보자. 치즈를 초대할게!', '오전 11:09'),
@@ -33,10 +42,23 @@ function initial() {
   ]};
 }
 
-function load() {
+function storedState() {
   try {
     const saved = JSON.parse(localStorage.getItem(key));
-    if (!roleIds.includes(saved?.actor) || !Array.isArray(saved.rooms)) return initial();
+    if (roleIds.includes(saved?.actor) && Array.isArray(saved.rooms)) return saved;
+  } catch {}
+  return null;
+}
+
+function assignedRoom(data) {
+  const assigned = data.rooms.filter(hasFA);
+  return assigned.find(item => item.id === data.active) ?? assigned[0];
+}
+
+function load() {
+  try {
+    const saved = storedState();
+    if (!saved) return initial();
     const needsDemoId = !saved.routerDemoId;
     saved.routerDemoId ||= crypto.randomUUID();
     for (const item of saved.rooms) {
@@ -46,6 +68,10 @@ function load() {
       }
       rotateRouter(item);
       item.apiStart = item.messages.length;
+    }
+    const keptRoom = assignedRoom(saved);
+    for (const item of saved.rooms) {
+      if (item !== keptRoom && hasFA(item)) detachFA(item);
     }
     return saved;
   } catch {}
@@ -63,17 +89,91 @@ let composeTools = '';
 let apiMode = 'checking';
 let modal = null;
 let toastTimer;
+let updatingRooms = false;
 const pending = new Map();
 const drafts = new Map();
 
 const room = () => state.rooms.find(item => item.id === state.active && item.members.includes(state.actor));
+const faRoom = () => state.rooms.find(hasFA);
 const visibleRooms = () => state.rooms.filter(item => item.members.includes(state.actor));
 const settings = item => item.settings[state.actor] || {};
+const profileStatus = id => state.profileStatus?.[id] ?? people[id]?.description.trim() ?? '';
+const favoriteProfile = id => state.profileFavorites?.[state.actor]?.includes(id) ?? false;
 const draftId = () => state.actor + ':' + state.active;
 const dateLabel = '2026년 11월 9일 월요일';
 
-function save() {
+function persist() {
   try { localStorage.setItem(key, JSON.stringify(state)); } catch {}
+}
+
+function withRoomLock(action) {
+  if (navigator.locks) void navigator.locks.request(key, action);
+  else action();
+}
+
+function mergeSharedRooms(saved) {
+  const deleted = new Set([...(state.deletedRoomIds || []), ...(saved.deletedRoomIds || [])]);
+  state.deletedRoomIds = [...deleted];
+  const assigned = assignedRoom(saved);
+  const sharedRooms = new Map(saved.rooms
+    .filter(item => !deleted.has(item.id) && (!hasFA(item) || item === assigned))
+    .map(item => [item.id, item]));
+  const rooms = [];
+  for (const item of state.rooms) {
+    if (deleted.has(item.id)) {
+      discardRoomState(item);
+      continue;
+    }
+    const shared = sharedRooms.get(item.id);
+    if (shared?.routerId && shared.routerId !== item.routerId) {
+      stopReply(item);
+      rooms.push(shared);
+    } else rooms.push(item);
+    sharedRooms.delete(item.id);
+  }
+  rooms.push(...sharedRooms.values());
+  if (rooms.length === state.rooms.length && rooms.every((item, index) => item === state.rooms[index])) return false;
+  state.rooms = rooms;
+  return true;
+}
+
+function syncRooms() {
+  const saved = storedState();
+  if (!saved?.routerDemoId) return;
+  if (saved.routerDemoId !== state.routerDemoId) {
+    for (const item of state.rooms) discardRoomState(item);
+    state = {...saved, actor:state.actor, active:null};
+  } else if (!mergeSharedRooms(saved)) return;
+  if (!room()) {
+    closeRoomView();
+    if (modal?.invite || ['members','login','input','remove-fa','leave','delete-room','rename'].includes(modal?.mode)) closeDialog();
+  }
+  if (modal?.mode === 'fa-profile' && modal.targetRoom) {
+    const item = profileRoom();
+    if (!item) closeDialog();
+    else if (modal.profileRouterId !== item.routerId) openTrustProfile(item);
+  }
+  render();
+  if (modal?.mode === 'picker') pickerRows();
+  if (modal && $('#dialog').open) positionPopover();
+}
+
+function save() {
+  if (updatingRooms) return persist();
+  // Apply shared room membership and deletions before saving a stale tab.
+  withRoomLock(() => {
+    syncRooms();
+    persist();
+  });
+}
+
+function changeRooms(action) {
+  withRoomLock(() => {
+    syncRooms();
+    updatingRooms = true;
+    try { action(); }
+    finally { updatingRooms = false; }
+  });
 }
 function showToast(text) {
   const toast = $('#toast');
@@ -95,6 +195,10 @@ const button = (symbol, text, action, extra = '') =>
 const actionButton = (text, action, kind = 'secondary', extra = '') =>
   `<button type="button" class="action-button ${kind}" data-action="${action}" ${extra}>${esc(text)}</button>`;
 
+const profileButton = (id, content, className = '') =>
+  `<button type="button" class="profile-trigger ${className}" data-action="show-profile" data-id="${esc(id)}"
+    aria-haspopup="dialog" aria-label="${esc(label(id))} 프로필 보기">${content}</button>`;
+
 function renderRail() {
   const selected = value => `aria-current="${tab === value ? 'page' : 'false'}" class="rail-item ${tab === value ? 'selected' : ''}"`;
   $('#rail').innerHTML = `
@@ -108,11 +212,12 @@ function renderRows() {
   if (!list) return;
   const matches = value => value.toLowerCase().includes(filter.trim().toLowerCase());
   if (tab === 'friends') {
-    const ids = [...contacts, 'fa'].filter(id => id !== state.actor && matches(label(id) + ' ' + people[id].description));
+    const ids = [...contacts, 'fa'].filter(id => id !== state.actor && matches(label(id) + ' ' + profileStatus(id)))
+      .sort((a,b) => Number(favoriteProfile(b)) - Number(favoriteProfile(a)));
     list.innerHTML = `
-      ${filter ? '' : `<div class="profile-self">${avatar(state.actor,48)}<div><strong>${label(state.actor)}</strong><small>내 프로필</small></div></div>`}
+      ${filter ? '' : profileButton(state.actor,`${avatar(state.actor,48)}<div><strong>${label(state.actor)}</strong><small>내 프로필</small></div>`,'profile-self')}
       <div class="list-subhead">친구 ${ids.length}</div>
-      ${ids.map(id => `<button class="friend-row" data-action="friend-chat" data-id="${id}">${avatar(id,42)}<span><strong>${label(id)}</strong><small>${esc(people[id].description)}</small></span>${id === 'fa' ? '<span class="tag">챗봇</span>' : ''}</button>`).join('')}
+      ${ids.map(id => profileButton(id,`${avatar(id,42)}<span><strong>${label(id)}</strong><small>${esc(profileStatus(id))}</small></span>${id === 'fa' ? '<span class="tag">챗봇</span>' : ''}`,'friend-row')).join('')}
       ${!ids.length ? '<p class="list-empty">검색 결과가 없어요.</p>' : ''}`;
     return;
   }
@@ -124,7 +229,7 @@ function renderRows() {
     const unread = item.messages.filter(message => message.unreadBy?.includes(state.actor)).length;
     return `<button class="room-row ${item.id === state.active ? 'active' : ''}" data-action="open-room" data-id="${esc(item.id)}" ${item.id === state.active ? 'aria-current="true"' : ''}>
       ${groupAvatar(item.members.filter(id => id !== state.actor))}
-      <span class="room-copy"><span class="room-title"><strong>${esc(item.name)}</strong>${item.members.length > 2 ? `<span class="count">${item.members.length}</span>` : ''}${pref.pinned ? icon('pin',13) : ''}${pref.muted ? icon('muted',13) : ''}</span>
+      <span class="room-copy"><span class="room-title"><strong>${esc(item.name)}</strong>${item.members.length > 2 ? `<span class="count">${item.members.length}</span>` : ''}${hasFA(item) ? `<span class="tag">${esc(label('fa'))} 참여 중</span>` : ''}${pref.pinned ? icon('pin',13) : ''}${pref.muted ? icon('muted',13) : ''}</span>
       <span class="preview">${esc(last?.text || '새 채팅방')}</span></span>
       <span class="room-meta"><small class="room-time">${esc(last?.time || '')}</small>${unread ? `<span class="room-unread" aria-label="읽지 않은 메시지 ${unread}개">${unread}</span>` : ''}</span></button>`;
   }).join('') || `<p class="list-empty">${filter ? '검색 결과가 없어요.' : '참여 중인 채팅방이 없어요.'}</p>`;
@@ -168,9 +273,9 @@ function messageHTML(message, item, index) {
   const meta = `<span class="message-meta">${unread ? `<span class="message-unread" aria-label="읽지 않은 사람 ${unread}명">${unread}</span>` : ''}<time>${esc(message.time || '')}</time></span>`;
   const expression = message.card?.kind === 'result' ? 'happy' : 'profile';
   return `<article class="message ${self ? 'mine' : 'theirs'}" data-sender="${esc(message.by)}" aria-label="${esc(label(message.by))}의 메시지">
-    ${self ? '' : avatar(message.by, 39, expression)}
+    ${self ? '' : profileButton(message.by,avatar(message.by,39,expression),'message-profile-avatar')}
     <div class="message-content">
-      ${self ? '' : `<div class="sender">${esc(label(message.by))}${message.by === 'fa' ? '<span>Family AI Agent</span>' : ''}</div>`}
+      ${self ? '' : `<div class="sender">${profileButton(message.by,esc(label(message.by)),'sender-profile')}${message.by === 'fa' ? '<span>Family AI Agent</span>' : ''}</div>`}
       ${message.text ? `<div class="bubble-line"><div class="bubble">${esc(message.text)}</div>${message.card ? '' : meta}</div>` : ''}
       ${message.card ? `<div class="bubble-line"><div class="card-stack">${renderCard(message.card, item, index)}${message.mode ? `<small class="reply-source">${message.mode === 'live' ? 'LLM 응답' : '샘플 응답'}</small>` : ''}</div>${meta}</div>` :
         message.mode ? `<small class="reply-source">${message.mode === 'live' ? 'LLM 응답' : '샘플 응답'}</small>` : ''}
@@ -187,13 +292,13 @@ function drawer(item) {
   const bot = item.members.includes('fa');
   if (panel === 'bot') return `<aside class="drawer" aria-label="챗봇">
     <header><h2>챗봇</h2>${button('close','챗봇 메뉴 닫기','close-panel')}</header>
-    <div class="drawer-bot">${avatar('fa',44)}<div><strong>${label('fa')}</strong><small>${people.fa.description}</small></div><span class="tag">참여 중</span></div>
+    ${profileButton('fa',`${avatar('fa',44)}<div><strong>${esc(label('fa'))}</strong><small>${esc(people.fa.description)}</small></div><span class="tag">참여 중</span>`,'drawer-bot')}
     ${menuRow('exit','챗봇 내보내기','remove-fa')}</aside>`;
   return `<aside class="drawer" aria-label="채팅방 메뉴"><header><h2>채팅방 메뉴</h2>${button('close','채팅방 메뉴 닫기','close-panel')}</header>
     <div class="drawer-scroll">
       <div class="drawer-heading">대화상대 <span>${item.members.length}</span></div>
       ${menuRow('invite','대화상대 초대','invite')}
-      <div class="drawer-members">${item.members.map(id => `<div>${avatar(id,32)}<span>${label(id)}</span>${id === state.actor ? '<small>나</small>' : ''}</div>`).join('')}</div>
+      <div class="drawer-members">${item.members.map(id => profileButton(id,`${avatar(id,32)}<span>${label(id)}</span>${id === state.actor ? '<small>나</small>' : ''}`)).join('')}</div>
       <div class="drawer-settings">
         ${bot ? menuRow('bot','챗봇','bots','<span class="row-detail">치즈 참여 중</span>') : ''}
         ${menuRow('edit','채팅방 이름 변경','rename')}
@@ -202,7 +307,10 @@ function drawer(item) {
         ${menuRow('download','대화 내용 내보내기','export')}
       </div>
     </div>
-    <footer>${button('exit','채팅방 나가기','leave')}<span>채팅방 나가기</span></footer></aside>`;
+    <footer class="room-exit-actions">
+      <button type="button" data-action="leave">${icon('exit',19)} 채팅방 나가기</button>
+      <button type="button" data-action="delete-room">${icon('trash',19)} 채팅방 삭제</button>
+    </footer></aside>`;
 }
 
 function renderMessages(keepScroll = false) {
@@ -271,6 +379,14 @@ function switchRoom(item) {
   render();
 }
 
+function closeRoomView() {
+  state.active = null;
+  mobileChat = false;
+  panel = '';
+  chatSearch = null;
+  composeTools = '';
+}
+
 function clearUnread(item, actor) {
   for (const message of item.messages) {
     if (message.unreadBy?.includes(actor)) {
@@ -331,13 +447,18 @@ function retireRouter(item) {
 
 function addMembers(item, ids) {
   const added = ids.filter(id => people[id] && !item.members.includes(id));
-  if (!added.length) return;
+  if (added.includes('fa') && faRoom()) {
+    showToast(faBusy);
+    return false;
+  }
+  if (!added.length) return true;
   retireRouter(item);
   rotateRouter(item);
   item.members.push(...added);
   append(item, [{by:'system', text:`${label(state.actor)}님이 ${names(added).join(', ')}님을 초대했습니다.`}]);
   item.apiStart = item.messages.length;
   if (item.members.includes('fa')) routeAction(item, 'welcome');
+  return true;
 }
 
 function renderComposeTools() {
@@ -372,6 +493,17 @@ function updateThread(item) {
 function stopReply(item) {
   pending.get(item.id)?.abort();
   pending.delete(item.id);
+}
+
+function discardRoomState(item) {
+  stopReply(item);
+  for (const actor of roleIds) drafts.delete(actor + ':' + item.id);
+}
+
+function removeRoom(item) {
+  discardRoomState(item);
+  (state.deletedRoomIds ??= []).push(item.id);
+  state.rooms = state.rooms.filter(candidate => candidate !== item);
 }
 
 async function runFA(item, operation) {
@@ -476,6 +608,23 @@ function openDialog(mode, data = {}) {
 
 function positionPopover() {
   const dialog = $('#dialog');
+  if (dialog.classList.contains('person-profile')) {
+    for (const property of ['--profile-top','--profile-left','--profile-arrow']) dialog.style.removeProperty(property);
+    const anchor = modal.anchor;
+    const width = PERSON_PROFILE_WIDTH;
+    if (!anchor || window.innerWidth < 650 || modal.view) return;
+    const right = anchor.left < width + 22;
+    const left = right ? anchor.right + 10 : anchor.left - width - 10;
+    if (left < 12 || left + width > window.innerWidth - 12) return;
+    const height = Math.min(PERSON_PROFILE_HEIGHT, window.innerHeight - 24);
+    const center = (anchor.top + anchor.bottom) / 2;
+    const top = Math.max(12, Math.min(center - height / 2, window.innerHeight - height - 12));
+    dialog.classList.toggle('profile-right',right);
+    dialog.style.setProperty('--profile-top',`${top}px`);
+    dialog.style.setProperty('--profile-left',`${left}px`);
+    dialog.style.setProperty('--profile-arrow',`${Math.max(18, Math.min(center - top, height - 18))}px`);
+    return;
+  }
   const trigger = $('#member-trigger');
   if (!trigger || !dialog.classList.contains('kakao-popover')) return;
   const anchor = trigger.getBoundingClientRect();
@@ -493,14 +642,115 @@ function closeDialog() {
   $('#dialog').close();
 }
 
+function profileRoom() {
+  const item = faRoom();
+  if (item && item.id === modal?.targetRoom && item.members.includes(state.actor)) return item;
+  return null;
+}
+
+function showProfile(person, trigger) {
+  if (!Object.hasOwn(people,person)) return;
+  if (person === 'fa') {
+    const assigned = faRoom();
+    openTrustProfile(assigned?.members.includes(state.actor) ? assigned : null);
+  } else {
+    const anchor = trigger.getBoundingClientRect();
+    openDialog('person-profile',{person,anchor});
+  }
+}
+
+function openTrustProfile(item) {
+  openDialog('fa-profile',{targetRoom:item?.id,profileRouterId:item?.routerId});
+  if (item) void requestTrustProfile();
+}
+
+function renderTrustDialog() {
+  const dialog = $('#dialog');
+  const expanded = dialog.querySelector('details')?.open;
+  const focus = dialog.contains(document.activeElement) ? document.activeElement : null;
+  renderDialog();
+  if (expanded && dialog.querySelector('details')) dialog.querySelector('details').open = true;
+  if (!focus) return;
+  if (focus.matches('summary') && dialog.querySelector('summary')) {
+    dialog.querySelector('summary').focus({preventScroll:true});
+    return;
+  }
+  const replacement = [...dialog.querySelectorAll('[data-action]')].find(element =>
+    element.dataset.action === focus.dataset.action && element.dataset.command === focus.dataset.command &&
+    element.dataset.requestId === focus.dataset.requestId && !element.disabled);
+  (replacement ?? dialog.querySelector('.trust-close'))?.focus({preventScroll:true});
+}
+
+async function requestTrustProfile(action, actionId, quiet = false) {
+  const profile = modal;
+  const item = profileRoom();
+  if (!item || profile.busy || (quiet && (profile.polling || profile.confirmLock))) return;
+  const actor = state.actor;
+  const context = {demo_id:state.routerDemoId, room_id:item.routerId, actor};
+  if (quiet) profile.polling = true;
+  else {
+    profile.requestVersion = (profile.requestVersion || 0) + 1;
+    profile.busy = true;
+    profile.error = '';
+    profile.notice = '';
+    profile.confirmLock = false;
+    renderTrustDialog();
+  }
+  const version = profile.requestVersion;
+  const isCurrent = () => modal === profile && state.actor === actor &&
+    profileRoom()?.routerId === context.room_id && profile.requestVersion === version;
+  let changed = false;
+  const signal = AbortSignal.timeout(8000);
+  try {
+    const endpoint = '/api/trust?' + new URLSearchParams(context);
+    let response = action
+      ? await fetch('/api/trust/action', {method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...context, action, ...(actionId && {action_id:actionId})}), signal})
+      : await fetch(endpoint,{signal});
+    // A restarted preview server has no active session for rooms saved in the browser.
+    if (!action && response.status === 404 && isCurrent() && !pending.has(item.id)) {
+      const registration = await fetch('/api/router', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:routerBody(item,actor,'welcome'), signal});
+      if (registration.ok && isCurrent()) {
+        const result = await registration.json();
+        if (!isCurrent()) return;
+        item.flow = result.state;
+        updateThread(item);
+        response = await fetch(endpoint,{signal});
+      }
+    }
+    const snapshot = await response.json();
+    if (!response.ok) throw new Error(snapshot.error || '보안 상태를 확인하지 못했어요.');
+    if (!isCurrent()) return;
+    changed = Boolean(profile.error) || JSON.stringify(snapshot) !== JSON.stringify(profile.snapshot);
+    profile.snapshot = snapshot;
+    profile.error = '';
+    if (!quiet) profile.notice = snapshot.notice || '';
+  } catch (error) {
+    if (isCurrent()) {
+      const message = error.name === 'TimeoutError' ? '보안 응답이 지연되고 있어요.' : error.message;
+      changed = profile.error !== message;
+      profile.error = message;
+    }
+  } finally {
+    if (quiet) profile.polling = false;
+    else profile.busy = false;
+    if (isCurrent() && (!quiet || changed)) renderTrustDialog();
+  }
+}
+
 function pickerRows() {
   const item = room();
   const query = (modal.query || '').trim().toLowerCase();
+  const faUnavailable = Boolean(faRoom());
+  if (faUnavailable) modal.ids = modal.ids.filter(id => id !== 'fa');
   const available = [...contacts, 'fa'].filter(id => id !== state.actor && !(modal.invite && item?.members.includes(id)));
   const matches = available.filter(id => (label(id) + ' ' + people[id].description).toLowerCase().includes(query));
   $('#selected-people').innerHTML = modal.ids.map(id => `<button type="button" class="selected-chip" data-action="toggle-contact" data-id="${id}" aria-label="${label(id)} 선택 취소">${modal.invite ? '' : avatar(id,22)}${label(id)}${icon('close',12)}</button>`).join('');
-  $('#picker-rows').innerHTML = matches.map(id => `
-    <label class="picker-row">${avatar(id,40)}<span><strong>${label(id)}</strong><small>${esc(people[id].description)}</small></span><input type="checkbox" class="contact-check" data-id="${id}" ${modal.ids.includes(id) ? 'checked' : ''}></label>`).join('') ||
+  $('#picker-rows').innerHTML = matches.map(id => {
+    const unavailable = id === 'fa' && faUnavailable;
+    return `<label class="picker-row">${avatar(id,40)}<span><strong>${label(id)}</strong><small>${esc(unavailable ? faBusy : people[id].description)}</small></span><input type="checkbox" class="contact-check" data-id="${id}" ${modal.ids.includes(id) ? 'checked' : ''} ${unavailable ? 'disabled' : ''}></label>`;
+  }).join('') ||
     '<p class="list-empty">초대할 친구가 없어요.</p>';
   if (modal.invite) {
     $('#selected-count').textContent = modal.ids.length || '';
@@ -516,11 +766,24 @@ function renderDialog() {
   const item = room();
   const members = modal.mode === 'members';
   const invite = modal.mode === 'picker' && modal.invite;
+  if (modal.mode === 'person-profile') {
+    target.className = 'person-profile';
+    target.innerHTML = renderPersonProfile({person:modal.person, actor:state.actor, status:profileStatus(modal.person),
+      favorite:favoriteProfile(modal.person), view:modal.view});
+    return;
+  }
+  if (modal.mode === 'fa-profile') {
+    target.className = 'fa-profile';
+    const assigned = faRoom();
+    target.innerHTML = renderTrustProfile({...modal, roomName:profileRoom()?.name,
+      canOpenChat:!assigned || assigned.members.includes(state.actor)});
+    return;
+  }
   target.className = members ? 'kakao-popover kakao-members' : invite ? 'kakao-popover kakao-picker' : '';
   if (members) {
     target.innerHTML = `<h2 id="modal-title" class="sr-only">대화상대</h2>
-      <div class="member-popover-list">${item.members.map(id => `<div class="member-popover-row">${avatar(id,40)}
-        ${id === state.actor ? '<small>나</small>' : ''}<span>${label(id)}</span>${id === 'fa' ? '<small class="tag">챗봇</small>' : ''}</div>`).join('')}</div>
+      <div class="member-popover-list">${item.members.map(id => profileButton(id,`${avatar(id,40)}
+        ${id === state.actor ? '<small>나</small>' : ''}<span>${label(id)}</span>${id === 'fa' ? '<small class="tag">챗봇</small>' : ''}`,'member-popover-row')).join('')}</div>
       <button type="button" class="member-invite" data-action="invite">${icon('plus',21)} 대화상대 초대하기</button>`;
     return;
   }
@@ -562,8 +825,14 @@ function renderDialog() {
       break;
     case 'leave':
       title = '채팅방 나가기';
-      body = `<div class="dialog-body"><p>이 채팅방에서 나가시겠어요?</p>
+      body = `<div class="dialog-body"><p>${esc(label(state.actor))} 화면에서 이 채팅방을 나가시겠어요?</p>
+        <p class="field-note">나가면 내 채팅 목록에서 사라져요. 남은 참여자는 대화를 계속 볼 수 있어요.</p>
         <label class="quiet-leave"><input name="quiet" type="checkbox"> 조용히 나가기</label></div>${dialogActions('나가기', false, true)}`;
+      break;
+    case 'delete-room':
+      title = '채팅방 삭제';
+      body = `<div class="dialog-body"><p><strong>${esc(item.name)}</strong> 방과 대화 기록을 이 데모의 모든 역할에서 삭제할까요?</p>
+        <p class="field-note">삭제하면 대화 기록을 복구할 수 없어요.</p></div>${dialogActions('삭제', false, true)}`;
       break;
     case 'remove-fa':
       title = '챗봇 내보내기';
@@ -589,11 +858,17 @@ function renderDialog() {
 }
 
 function commitDialog(event) {
-  event.preventDefault();
   if (!modal) return;
   const data = new FormData(event.target);
-  const item = room();
+  const item = modal.targetRoom ? visibleRooms().find(candidate => candidate.id === modal.targetRoom) : room();
   switch (modal.mode) {
+    case 'person-profile': {
+      if (modal.person !== state.actor || modal.view !== 'edit') return;
+      (state.profileStatus ??= {})[state.actor] = String(data.get('status') ?? '').trim().slice(0,60);
+      openDialog('person-profile',{person:modal.person,anchor:modal.anchor});
+      save(); renderRows();
+      return;
+    }
     case 'picker':
       if (!modal.ids.length) return;
       if (!modal.invite) {
@@ -601,14 +876,20 @@ function commitDialog(event) {
         $('#dialog [name=name]').select();
         return;
       }
-      if (item) addMembers(item, modal.ids);
+      if (!item || !addMembers(item, modal.ids)) {
+        pickerRows();
+        return;
+      }
       panel = ''; composeTools = '';
       break;
     case 'room-name': {
       const name = String(data.get('name')).trim();
       if (!name) return showToast('채팅방 이름을 입력해 주세요.');
       const created = makeRoom(crypto.randomUUID(), name, [state.actor]);
-      addMembers(created, modal.ids);
+      if (!addMembers(created, modal.ids)) {
+        openDialog('picker', {ids:modal.ids});
+        return;
+      }
       state.rooms.unshift(created);
       closeDialog();
       switchRoom(created);
@@ -644,20 +925,21 @@ function commitDialog(event) {
       delete item.settings[state.actor];
       if (!data.has('quiet')) append(item,[{by:'system',text:`${label(state.actor)}님이 나갔습니다.`}]);
       item.apiStart = item.messages.length;
-      if (!item.members.some(id => id !== 'fa')) {
-        state.rooms = state.rooms.filter(candidate => candidate !== item);
-      }
-      state.active = null;
-      mobileChat = false;
-      panel = '';
-      chatSearch = null;
+      if (!item.members.some(id => id !== 'fa')) removeRoom(item);
+      closeRoomView();
+      break;
+    case 'delete-room':
+      if (!item) return;
+      retireRouter(item);
+      removeRoom(item);
+      closeRoomView();
+      showToast('채팅방을 삭제했어요.');
       break;
     case 'remove-fa':
       if (!item) return;
       retireRouter(item);
-      rotateRouter(item);
-      item.members = item.members.filter(id => id !== 'fa');
-      append(item,[{by:'system',text:'치즈가 채팅방에서 나갔습니다.'}]);
+      detachFA(item);
+      append(item,[{by:'system',text:`${label('fa')}가 채팅방에서 나갔습니다.`}]);
       panel = '';
       break;
     case 'reset':
@@ -701,6 +983,46 @@ function selectContact(id) {
 function handleAction(action, element) {
   const item = room();
   switch (action) {
+    case 'show-profile':
+      showProfile(element.dataset.id,element); break;
+    case 'profile-chat':
+      if (!['person-profile','fa-profile'].includes(modal?.mode)) return;
+      closeDialog();
+      if (element.dataset.id === 'fa') changeRooms(() => handleAction('friend-chat',element));
+      else handleAction('friend-chat',element);
+      break;
+    case 'profile-call':
+    case 'profile-edit':
+      if (modal?.mode === 'person-profile') {
+        openDialog('person-profile',{person:modal.person,anchor:modal.anchor,view:action === 'profile-edit' ? 'edit' : 'call'});
+        $('#profile-status')?.focus();
+      }
+      break;
+    case 'profile-favorite': {
+      if (modal?.mode !== 'person-profile' || modal.person === state.actor) return;
+      const preferences = state.profileFavorites ??= {};
+      const ids = preferences[state.actor] || [];
+      preferences[state.actor] = ids.includes(modal.person) ? ids.filter(id => id !== modal.person) : [...ids, modal.person];
+      renderDialog(); positionPopover(); renderRows(); save();
+      $('#dialog [data-action="profile-favorite"]')?.focus({preventScroll:true});
+      break;
+    }
+    case 'trust-refresh':
+      if (modal?.mode === 'fa-profile') void requestTrustProfile();
+      break;
+    case 'trust-command':
+      if (modal?.mode !== 'fa-profile') return;
+      if (element.dataset.command === 'lock' && !modal.confirmLock) {
+        modal.confirmLock = true;
+        renderTrustDialog();
+      } else void requestTrustProfile(element.dataset.command,element.dataset.requestId);
+      break;
+    case 'trust-cancel-confirm':
+      if (modal?.mode === 'fa-profile') {
+        modal.confirmLock = false;
+        renderTrustDialog();
+      }
+      break;
     case 'friends':
     case 'chats':
       tab = action; mobileChat = false; listSearch = false; filter = ''; render(); break;
@@ -722,10 +1044,16 @@ function handleAction(action, element) {
       selectContact(element.dataset.id); break;
     case 'friend-chat': {
       const id = element.dataset.id;
+      const assigned = id === 'fa' ? faRoom() : null;
+      if (assigned) {
+        if (assigned.members.includes(state.actor)) switchRoom(assigned);
+        else showToast(faBusy);
+        break;
+      }
       let dm = visibleRooms().find(candidate => candidate.members.length === 2 && candidate.members.includes(id));
       if (!dm) {
         dm = makeRoom(crypto.randomUUID(),label(id),[state.actor]);
-        addMembers(dm,[id]);
+        if (!addMembers(dm,[id])) break;
         state.rooms.unshift(dm);
       }
       switchRoom(dm);
@@ -746,8 +1074,9 @@ function handleAction(action, element) {
       if (item) openDialog('rename',{name:item.name});
       break;
     case 'leave':
+    case 'delete-room':
     case 'remove-fa':
-      if (item) openDialog(action);
+      if (item) openDialog(action,{targetRoom:item.id});
       break;
     case 'pin':
     case 'mute':
@@ -831,18 +1160,43 @@ $('#dialog').addEventListener('close', () => {
   $('#member-trigger')?.setAttribute('aria-expanded', 'false');
 });
 $('#dialog').addEventListener('click', event => {
-  if (event.target !== event.currentTarget || !event.currentTarget.classList.contains('kakao-popover')) return;
+  if (event.target !== event.currentTarget || !event.currentTarget.matches('.kakao-popover,.person-profile,.fa-profile')) return;
   const rect = event.currentTarget.getBoundingClientRect();
   if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDialog();
 });
 window.addEventListener('resize', () => { if ($('#dialog').open) positionPopover(); });
+window.addEventListener('storage', event => { if (event.key === key) syncRooms(); });
+setInterval(() => {
+  if (modal?.mode === 'fa-profile' && !document.hidden) void requestTrustProfile(undefined,undefined,true);
+}, 3000);
 
 document.addEventListener('click', event => {
   const trigger = event.target.closest('[data-action]');
-  if (trigger && !trigger.disabled) handleAction(trigger.dataset.action,trigger);
+  if (!trigger || trigger.disabled) return;
+  if (trigger.dataset.action === 'friend-chat' && trigger.dataset.id === 'fa') {
+    changeRooms(() => handleAction('friend-chat',trigger));
+  } else handleAction(trigger.dataset.action,trigger);
 });
 document.addEventListener('submit', event => {
-  if (event.target.id === 'dialog-form') commitDialog(event);
+  if (event.target.id === 'dialog-form') {
+    event.preventDefault();
+    const submitted = modal;
+    if (['picker','room-name','remove-fa','leave','delete-room','reset'].includes(submitted?.mode)) {
+      const requestedFA = submitted.ids?.includes('fa');
+      changeRooms(() => {
+        if (modal !== submitted) return;
+        const assigned = requestedFA && faRoom();
+        if (assigned) {
+          const alreadyHere = modal.invite && assigned === room();
+          if (modal.mode === 'room-name') openDialog('picker', {ids:modal.ids});
+          else pickerRows();
+          showToast(alreadyHere ? `${label('fa')}는 이미 이 채팅방에 참여 중이에요.` : faBusy);
+          return;
+        }
+        commitDialog(event);
+      });
+    } else commitDialog(event);
+  }
   if (event.target.id === 'composer') {
     event.preventDefault();
     send($('#draft').value);
