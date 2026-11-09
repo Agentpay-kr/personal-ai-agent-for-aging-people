@@ -1,26 +1,35 @@
-// Smoke test of the HTTP + SSE API. Starts the server in-process on a spare port.
+// Smoke + security test of the HTTP + SSE API. Starts the server in-process on a spare port.
 //   node demo/http-smoke.js
 
 process.env.PORT ??= '8799';
+process.env.MOLLA_PORT = 'off';
 process.env.FA_MODE ??= 'scripted';
 process.env.FA_VM_STEP_MS ??= '30';
 process.env.FA_MEMORY ??= 'off';
 
 await import('../src/server.js');
-const B = `http://localhost:${process.env.PORT}/api`;
+const B = `http://127.0.0.1:${process.env.PORT}/api`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const post = async (path, body) => {
-  const r = await fetch(B + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  return { status: r.status, body: await r.json() };
-};
-const get = async (path) => (await fetch(B + path)).json();
 
-// Open SSE streams for two viewers and collect events.
-function listen(viewer) {
+async function req(method, path, { body, token, headers = {} } = {}) {
+  const r = await fetch(B + path, {
+    method,
+    headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(token ? { 'x-fa-session': token } : {}), ...headers },
+    body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+  });
+  return { status: r.status, headers: r.headers, body: await r.json().catch(() => ({})) };
+}
+const login = async (actor) => (await req('POST', '/sessions', { body: { actor } })).body.session;
+const as = (token) => ({
+  get: async (p) => (await req('GET', p, { token })).body,
+  post: (p, body = {}) => req('POST', p, { token, body }),
+});
+
+function listen(token) {
   const events = [];
   const ctrl = new AbortController();
   (async () => {
-    const res = await fetch(`${B}/stream?viewer=${viewer}`, { signal: ctrl.signal });
+    const res = await fetch(`${B}/stream?session=${token}`, { signal: ctrl.signal });
     const dec = new TextDecoder();
     let buf = '';
     for await (const chunk of res.body) {
@@ -30,7 +39,7 @@ function listen(viewer) {
         const block = buf.slice(0, i);
         buf = buf.slice(i + 2);
         const data = block.split('\n').find((l) => l.startsWith('data: '));
-        if (data) events.push(JSON.parse(data.slice(6)));
+        if (data && !block.startsWith('event: hello')) events.push(JSON.parse(data.slice(6)));
       }
     }
   })().catch(() => {});
@@ -42,64 +51,72 @@ const check = (label, ok) => {
   if (!ok) process.exitCode = 1;
 };
 
-console.log('health:', await get('/health'));
-const mom = listen('mom');
-const son = listen('son');
-const outsider = listen('dad');
+const [sonT, momT, dadT] = [await login('son'), await login('mom'), await login('dad')];
+const son = as(sonT);
+const mom = as(momT);
+const dad = as(dadT);
+check('demo login rejects the agent identity', (await req('POST', '/sessions', { body: { actor: 'fa' } })).status === 400);
+
+const momSse = listen(momT);
+const sonSse = listen(sonT);
+const dadSse = listen(dadT);
 await sleep(200);
 
-const room = (await post('/rooms', { name: '우리 가족', createdBy: 'son', members: ['mom', 'fa'] })).body;
-check('room created', Boolean(room.id));
+const room = (await son.post('/rooms', { name: '우리 가족', members: ['mom', 'fa'] })).body;
+check('room created by the session user', room.createdBy === 'son');
 
-await post(`/rooms/${room.id}/messages`, { from: 'son', text: '엄마 구독 정리해줘' });
+// ---- identity binding
+check('no session → 401', (await req('GET', `/rooms/${room.id}/messages`)).status === 401);
+check('text/plain body → 415', (await req('POST', `/rooms/${room.id}/messages`, { token: sonT, body: '{"text":"hi"}', headers: { 'content-type': 'text/plain' } })).status === 415);
+check('body claiming another user → 403', (await son.post(`/rooms/${room.id}/messages`, { from: 'mom', text: '엄마인 척' })).status === 403);
+check('foreign origin gets no CORS grant', !(await req('GET', '/health', { headers: { origin: 'https://evil.example' } })).headers.get('access-control-allow-origin'));
+check('localhost origin gets a CORS grant', (await req('GET', '/health', { headers: { origin: 'http://localhost:5173' } })).headers.get('access-control-allow-origin') === 'http://localhost:5173');
+check('non-member cannot read the room', (await req('GET', `/rooms/${room.id}/messages`, { token: dadT })).status === 403);
+check('non-member cannot act in the room', (await dad.post('/actions', { roomId: room.id, action: 'scan_subscriptions', input: { owner: 'dad' } })).status === 403);
+check('VM panel is gated by read permission', (await req('GET', '/vm/son', { token: momT })).status === 403);
+
+// ---- main flow
+await son.post(`/rooms/${room.id}/messages`, { text: '엄마 구독 정리해줘' });
 await sleep(300);
-
-const momView = await get(`/rooms/${room.id}/messages?viewer=mom`);
-const inputCard = momView.find((e) => e.type === 'card.input_request');
+const inputCard = (await mom.get(`/rooms/${room.id}/messages`)).find((e) => e.type === 'card.input_request');
 check('mom can fill the connect card', inputCard?.canAct === true && inputCard.fields.length === 2);
-const sonView = await get(`/rooms/${room.id}/messages?viewer=son`);
-const sonCard = sonView.find((e) => e.type === 'card.input_request');
+const sonCard = (await son.get(`/rooms/${room.id}/messages`)).find((e) => e.type === 'card.input_request');
 check('son sees the card without fields', sonCard?.canAct === false && sonCard.fields.length === 0 && Boolean(sonCard.hint));
-
-const sonTry = await post(`/requests/${inputCard.id}/input`, { userId: 'son', values: { id: 'x', password: 'y' } });
-check(`son cannot submit mom's credentials (${sonTry.status} ${sonTry.body.error})`, sonTry.status === 403);
+check("son cannot submit mom's credentials", (await son.post(`/requests/${inputCard.id}/input`, { values: { id: 'x', password: 'y' } })).status === 403);
 
 const SECRET = 'demo-secret-123';
-const momInput = await post(`/requests/${inputCard.id}/input`, { userId: 'mom', values: { id: 'mom@example.com', password: SECRET } });
-check('mom connects her email', momInput.status === 200);
+check('mom connects her email', (await mom.post(`/requests/${inputCard.id}/input`, { values: { id: 'mom@example.com', password: SECRET } })).status === 200);
 await sleep(400);
-
-const subsCard = (await get(`/rooms/${room.id}/messages?viewer=son`)).find((e) => e.type === 'card.subscriptions');
+const subsCard = (await son.get(`/rooms/${room.id}/messages`)).find((e) => e.type === 'card.subscriptions');
 check('subscriptions card appears after connect (resumed scan)', subsCard?.items.length === 4 && subsCard.canAct === true);
 
-const cancel = await post('/actions', { roomId: room.id, requester: 'son', action: 'cancel_subscription', input: { owner: 'mom', subscription_ids: ['watcha', 'fortune'] } });
+const cancel = await son.post('/actions', { roomId: room.id, action: 'cancel_subscription', input: { owner: 'mom', subscription_ids: ['watcha', 'fortune'] } });
 check('cancel from son waits for mom', cancel.body.status === 'waiting_approval');
-
-const approval = (await get(`/rooms/${room.id}/messages?viewer=mom`)).find((e) => e.type === 'card.approval_request');
+const approval = (await mom.get(`/rooms/${room.id}/messages`)).find((e) => e.type === 'card.approval_request');
 check('mom has the approve button', approval.canAct === true && approval.myRole === 'owner');
-const sonVote = await post(`/requests/${approval.id}/vote`, { userId: 'son', vote: 'approve' });
-check(`son cannot approve on mom's behalf (${sonVote.status})`, sonVote.status === 403);
-const vote = await post(`/requests/${approval.id}/vote`, { userId: 'mom', vote: 'approve' });
-check('mom approves -> cancelled', vote.body.status === 'approved' && vote.body.result.monthlySaved === 17300);
+check("son cannot approve on mom's behalf", (await son.post(`/requests/${approval.id}/vote`, { vote: 'approve' })).status === 403);
+const vote = await mom.post(`/requests/${approval.id}/vote`, { vote: 'approve' });
+check('mom approves → cancelled', vote.body.status === 'done' && vote.body.result.monthlySaved === 17300);
+check('VM state updated', (await son.get('/vm/mom')).subscriptions.filter((s) => s.status === 'cancelled').length === 2);
 
-const vm = await get('/vm/mom');
-check('VM state updated', vm.subscriptions.filter((s) => s.status === 'cancelled').length === 2);
-
-await post(`/rooms/${room.id}/rename`, { by: 'son', name: '우리 가족 💛' });
-await post(`/rooms/${room.id}/invite`, { by: 'son', members: ['dad'] });
-const left = await post(`/rooms/${room.id}/leave`, { userId: 'dad' });
+await son.post(`/rooms/${room.id}/rename`, { name: '우리 가족 💛' });
+await son.post(`/rooms/${room.id}/invite`, { members: ['dad'] });
+const left = await dad.post(`/rooms/${room.id}/leave`);
 check('rename / invite / leave', left.body.name === '우리 가족 💛' && !left.body.members.includes('dad'));
 
 await sleep(200);
-const all = JSON.stringify([...mom.events, ...son.events, ...outsider.events]);
+const all = JSON.stringify([...momSse.events, ...sonSse.events, ...dadSse.events]);
 check('password never appears in any SSE event', !all.includes(SECRET));
-check('SSE delivered live events to mom and son', mom.events.length > 10 && son.events.length > 10);
-check('dad (not in the room at first) did not get the early events', !outsider.events.some((e) => e.type === 'card.input_request'));
-const types = {};
-son.events.forEach((e) => (types[e.type] = (types[e.type] ?? 0) + 1));
-console.log('son SSE event counts:', types);
+check('SSE delivered live events to mom and son', momSse.events.length > 10 && sonSse.events.length > 10);
+check('dad did not get events from before he joined', !dadSse.events.some((e) => e.type === 'card.input_request'));
 
-mom.stop();
-son.stop();
-outsider.stop();
+// ---- Molla cookie sessions
+const reset = await son.post('/reset');
+check('reset clears sessions', reset.status === 200 && (await req('GET', '/rooms', { token: sonT })).status === 401);
+const stale = await req('GET', '/state', { headers: { cookie: `molla_session=${'a'.repeat(48)}` } });
+check('stale Molla cookie → 401 with a replacement cookie (CLI exit 3)', stale.status === 401 && /molla_session=/.test(stale.headers.get('set-cookie') ?? ''));
+
+momSse.stop();
+sonSse.stop();
+dadSse.stop();
 process.exit();

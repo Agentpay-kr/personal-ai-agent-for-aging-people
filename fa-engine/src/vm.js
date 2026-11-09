@@ -18,6 +18,21 @@ const SAMPLE_SUBSCRIPTIONS = {
   son: [],
 };
 
+// Catalog prices the VM sees before buying. The policy uses these, not a price
+// stated by the requester or the model.
+const CATALOG = [
+  { match: /쌀\s*20\s*kg/i, price: 62900 },
+  { match: /쌀/, price: 32900 },
+  { match: /휴지|화장지/, price: 18900 },
+  { match: /생수|물/, price: 11900 },
+  { match: /안마의자/, price: 1890000 },
+  { match: /tv|티비|텔레비전/i, price: 890000 },
+];
+
+export function catalogPrice(item) {
+  return CATALOG.find((c) => c.match.test(String(item ?? '')))?.price ?? null;
+}
+
 let vms;
 
 export function resetVms() {
@@ -45,6 +60,10 @@ export function vmState(owner) {
     transfers: vm.transfers,
     logs: vm.logs.slice(-50),
   };
+}
+
+export function appendVmLog(owner, text) {
+  vms[owner]?.logs.push({ ts: Date.now(), text });
 }
 
 export function findSubscriptions(owner, query) {

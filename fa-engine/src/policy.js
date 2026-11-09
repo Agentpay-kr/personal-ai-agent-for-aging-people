@@ -10,7 +10,7 @@
 //           -> owner approval + 1 family co-signer ("family multisig").
 //              The requester and the beneficiary never count as co-signers.
 
-import { familyMemberIds, nameOf } from './family.js';
+import { familyMemberIds, nameOf, isPerson } from './family.js';
 
 export const ACTIONS = {
   scan_subscriptions: { tier: 'read', label: '구독 조회', service: 'email' },
@@ -31,37 +31,34 @@ export const TIER_LABEL = {
 };
 
 export function evaluate(family, { requester, owner, action, input = {} }) {
-  const spec = ACTIONS[action];
+  const spec = typeof action === 'string' && Object.hasOwn(ACTIONS, action) ? ACTIONS[action] : null;
   const base = { action, requester, owner, tier: spec?.tier ?? null, approvals: null, inputFrom: null };
   const deny = (reason) => ({ ...base, decision: 'deny', reason });
 
   if (!spec) return deny(`알 수 없는 행동이에요 (${action}).`);
-  if (!family.members[requester] || family.members[requester].role === 'agent') {
-    return deny('요청한 사람을 확인할 수 없어요.');
-  }
-  if (!family.members[owner] || family.members[owner].role === 'agent') {
-    return deny('누구 계정에서 실행할지 확인할 수 없어요.');
-  }
+  if (!isPerson(family, requester)) return deny('요청한 사람을 확인할 수 없어요.');
+  if (!isPerson(family, owner)) return deny('누구 계정에서 실행할지 확인할 수 없어요.');
 
   if (requester !== owner && family.consent?.[owner] === 'revoked') {
     return deny(`${nameOf(family, owner)}님이 가족 도움을 꺼 두었어요. 본인만 요청할 수 있어요.`);
   }
 
+  const self = requester === owner;
+  const grants = family.delegations[owner]?.[requester] ?? [];
+  const noGrant = (t) =>
+    deny(`${nameOf(family, owner)}님이 ${nameOf(family, requester)}님에게 '${TIER_LABEL[t]}' 권한을 맡기지 않았어요.`);
+
   let tier = spec.tier;
   if (action === 'order_item' && Number(input.price ?? 0) > family.limits.orderAutoApproveKRW) {
+    // A big order is still an order: a delegate needs the "act" grant before money rules apply.
+    if (!self && !grants.includes('act')) return noGrant('act');
     tier = 'money';
   }
   base.tier = tier;
 
   if (tier === 'money') return evaluateMoney(family, base, input);
 
-  const self = requester === owner;
-  const grants = family.delegations[owner]?.[requester] ?? [];
-  if (!self && !grants.includes(tier)) {
-    return deny(
-      `${nameOf(family, owner)}님이 ${nameOf(family, requester)}님에게 '${TIER_LABEL[tier]}' 권한을 맡기지 않았어요.`,
-    );
-  }
+  if (!self && !grants.includes(tier)) return noGrant(tier);
 
   if (tier === 'read') {
     return {

@@ -6,10 +6,10 @@
 //   - Every action goes through policy.evaluate before anything runs.
 //   - Credentials are only accepted from the account owner, and never echoed back.
 
-import { seedFamily, FA_ID, nameOf, polish } from './family.js';
+import { seedFamily, FA_ID, nameOf, polish, getMember, isPerson } from './family.js';
 import { evaluate, ACTIONS, canVote, approvalState, approverRole } from './policy.js';
 import { SERVICES, storeCredentials, isConnected, connections, resetVault } from './vault.js';
-import { runInVm, resetVms, won, vmState } from './vm.js';
+import { runInVm, resetVms, won, vmState, catalogPrice } from './vm.js';
 import * as store from './store.js';
 import { remember, logDecision } from './memory.js';
 import { replyAsFa, agentMode } from './agent.js';
@@ -30,6 +30,15 @@ export function resetAll() {
   store.resetStore();
   resetVault();
   resetVms();
+  vmLocks.clear();
+}
+
+// One action at a time per owner VM, so concurrent approvals can't both act on the same state.
+const vmLocks = new Map();
+function withVmLock(owner, fn) {
+  const run = (vmLocks.get(owner) ?? Promise.resolve()).then(fn, fn);
+  vmLocks.set(owner, run.catch(() => {}));
+  return run;
 }
 
 // ---------------------------------------------------------------- rooms
@@ -40,7 +49,7 @@ const FA_GREETING =
   '비밀번호는 각자 화면에서만 입력하니 안심하세요.';
 
 function requireMember(id) {
-  if (!family.members[id]) throw new EngineError(400, `unknown member: ${id}`);
+  if (!getMember(family, id)) throw new EngineError(400, `unknown member: ${id}`);
 }
 
 function requireRoom(roomId) {
@@ -115,6 +124,7 @@ export function listRooms(viewer) {
 
 export function roomMessages(roomId, viewer) {
   const room = requireRoom(roomId);
+  if (!room.members.includes(viewer)) throw new EngineError(403, '이 방의 멤버가 아니에요');
   return room.events.map((e) => viewFor(e, viewer));
 }
 
@@ -187,11 +197,24 @@ function buildContext(roomId) {
 // -------------------------------------------------------------- gateway
 
 export async function requestAction({ roomId, requester, action, input = {} }) {
-  requireRoom(roomId);
+  const room = requireRoom(roomId);
+  if (!room.members.includes(requester)) throw new EngineError(403, '이 방의 멤버가 아니에요');
+  input = { ...input };
   const owner = input.owner ?? requester;
+  if (action === 'order_item') {
+    // Price comes from the VM catalog when known, never just from the request.
+    input.price = catalogPrice(input.item) ?? input.price;
+  }
   const decision = evaluate(family, { requester, owner, action, input });
   decision.reason = polish(decision.reason);
   logDecision(`${N(requester)} → ${ACTIONS[action]?.label ?? action} @ ${N(owner)} 계정: ${decision.decision} — ${decision.reason}`);
+
+  // Cards that need the owner must land where the owner can see them.
+  if ((decision.decision === 'needs_input' || decision.decision === 'needs_approval') && !room.members.includes(owner)) {
+    const reason = polish(`${N(owner)}님이 이 방에 없어요. ${N(owner)}님이 있는 방에서 요청해 주세요.`);
+    store.emit(roomId, { type: 'card.blocked', from: FA_ID, action, actionLabel: ACTIONS[action]?.label ?? action, owner, requester, reason });
+    return out('denied', { reason }, `🔒 ${reason}`);
+  }
 
   switch (decision.decision) {
     case 'deny':
@@ -212,8 +235,19 @@ function out(status, data, say) {
   return { status, ...data, say: polish(say), forModel: { status, ...data } };
 }
 
-async function execute({ roomId, requester, owner, action, input }) {
+function execute(args) {
+  return withVmLock(args.owner, () => executeNow(args));
+}
+
+async function executeNow({ roomId, requester, owner, action, input, approvalId = null }) {
   const spec = ACTIONS[action];
+  // Re-check right before running: consent or delegation may have changed while it waited.
+  const recheck = evaluate(family, { requester, owner, action, input });
+  if (recheck.decision === 'deny') {
+    const reason = polish(recheck.reason);
+    store.emit(roomId, { type: 'card.blocked', from: FA_ID, action, actionLabel: spec.label, owner, requester, reason });
+    return out('denied', { reason }, `🔒 ${reason}`);
+  }
   if (spec.service && !isConnected(owner, spec.service)) {
     const connectDecision = evaluate(family, { requester, owner, action: 'connect_account', input: { service: spec.service } });
     if (connectDecision.decision !== 'needs_input') {
@@ -222,7 +256,7 @@ async function execute({ roomId, requester, owner, action, input }) {
     }
     return createInputRequest({
       roomId, requester, owner, service: spec.service, decision: connectDecision,
-      then: { requester, owner, action, input },
+      then: { requester, owner, action, input, approvalId },
     });
   }
 
@@ -257,6 +291,10 @@ function present({ roomId, requester, owner, action, result }) {
         (unused.length ? ` 잘 안 쓰는 건 ${unused.join(', ')}이에요. 해지할 항목을 골라주세요.` : ''));
     }
     case 'cancel_subscription': {
+      if (result.cancelled.length === 0) {
+        store.emit(roomId, { type: 'card.result', from: FA_ID, ok: false, owner, title: '해지할 항목 없음', lines: ['이미 해지됐거나 찾을 수 없는 구독이에요.'] });
+        return out('failed', { reason: '이미 해지됐거나 찾을 수 없는 구독이에요.' }, '이미 해지됐거나 찾을 수 없는 구독이에요.');
+      }
       const names = result.cancelled.map((s) => s.name);
       store.emit(roomId, {
         type: 'card.result', from: FA_ID, ok: true, owner,
@@ -338,7 +376,13 @@ export async function submitInput({ requestId, userId, values = {} }) {
   r.status = 'connecting';
   emitInputCard(r);
   const log = (text) => store.emit(r.roomId, { type: 'vm.log', owner: r.owner, text: `[${N(r.owner)} VM] ${text}` });
-  await runInVm(r.owner, 'connect_account', { service: r.service, serviceLabel: svc.label }, log);
+  try {
+    await runInVm(r.owner, 'connect_account', { service: r.service, serviceLabel: svc.label }, log);
+  } catch (err) {
+    r.status = 'pending'; // let the owner try again
+    emitInputCard(r);
+    throw new EngineError(502, `연결에 실패했어요: ${err.message}`);
+  }
   const { maskedId } = storeCredentials(r.owner, r.service, { id: values.id, password: values.password });
   r.status = 'done';
   emitInputCard(r, { maskedId });
@@ -346,11 +390,22 @@ export async function submitInput({ requestId, userId, values = {} }) {
   faSay(r.roomId, `✅ ${N(r.owner)}님 ${svc.label} 연결 완료! 비밀번호는 ${N(r.owner)}님 VM 금고에만 있고, 가족에게도 보이지 않아요.`);
 
   if (r.then) {
-    // Resume the action that was waiting for this account. It was already allowed/approved.
+    // Resume the action that was waiting for this account. execute() re-checks the policy first.
     const result = await execute({ roomId: r.roomId, ...r.then });
+    if (r.then.approvalId) settleApproval(store.getRequest(r.then.approvalId), result);
     faSay(r.roomId, result.say);
   }
   return { ok: true, maskedId };
+}
+
+// Record what actually happened to an approved request (done / failed / still waiting).
+function settleApproval(r, result) {
+  if (!r) return;
+  r.result = result.forModel;
+  r.updatedAt = Date.now();
+  if (['failed', 'denied', 'blocked'].includes(result.status)) r.status = 'failed';
+  else if (result.status === 'done') r.status = 'done';
+  emitApprovalCard(r);
 }
 
 // ------------------------------------------------------------ approvals
@@ -459,23 +514,38 @@ export async function vote({ requestId, userId, vote: v }) {
 
   r.status = 'approved';
   emitApprovalCard(r);
-  const result = await execute({ roomId: r.roomId, requester: r.requester, owner: r.owner, action: r.action, input: r.input });
-  r.result = result.forModel;
-  r.updatedAt = Date.now();
+  const result = await execute({
+    roomId: r.roomId, requester: r.requester, owner: r.owner, action: r.action, input: r.input, approvalId: r.id,
+  });
+  settleApproval(r, result);
   faSay(r.roomId, result.say);
   return { status: r.status, result: result.forModel };
 }
 
 export function cancelRequest({ requestId, userId }) {
   const r = store.getRequest(requestId);
-  if (!r || r.kind !== 'approval') throw new EngineError(404, 'request not found');
+  if (!r) throw new EngineError(404, 'request not found');
   if (r.status !== 'pending') throw new EngineError(409, '이미 처리된 요청이에요');
   if (userId !== r.requester && userId !== r.owner) throw new EngineError(403, '요청한 사람이나 계정 주인만 취소할 수 있어요');
   r.status = 'cancelled';
   r.updatedAt = Date.now();
-  emitApprovalCard(r);
+  if (r.kind === 'input') emitInputCard(r);
+  else emitApprovalCard(r);
   system(r.roomId, `${N(userId)}님이 요청을 취소했어요.`);
   return { status: r.status };
+}
+
+// When an owner switches family help off, drop everything others asked of them.
+export function cancelRequestsFor(owner) {
+  for (const r of store.allRequests()) {
+    if (r.owner === owner && r.requester !== owner && r.status === 'pending') {
+      r.status = 'cancelled';
+      r.updatedAt = Date.now();
+      if (r.kind === 'input') emitInputCard(r);
+      else emitApprovalCard(r);
+      system(r.roomId, polish(`${N(owner)}님이 가족 도움을 꺼서 요청이 취소됐어요.`));
+    }
+  }
 }
 
 // ---------------------------------------------------------------- views
@@ -521,7 +591,10 @@ export function familyInfo() {
   };
 }
 
-export function vmInfo(owner) {
-  requireMember(owner);
+export function vmInfo(owner, viewer) {
+  if (!isPerson(family, owner)) throw new EngineError(404, 'unknown member');
+  // Same rule as any read: the owner, or someone the owner delegated "read" to.
+  const d = evaluate(family, { requester: viewer, owner, action: 'scan_subscriptions' });
+  if (d.decision !== 'allow') throw new EngineError(403, polish(d.reason));
   return { ...vmState(owner), connections: connections(owner) };
 }

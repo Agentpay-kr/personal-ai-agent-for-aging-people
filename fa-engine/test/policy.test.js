@@ -27,6 +27,11 @@ test('a big order escalates to the money tier', () => {
   assert.equal(d.decision, 'needs_approval');
 });
 
+test('a big order does not skip the delegation check', () => {
+  assert.equal(ev('dad', 'mom', 'order_item', { item: '쌀', price: 30000 }).decision, 'deny');
+  assert.equal(ev('dad', 'mom', 'order_item', { item: 'TV', price: 600000 }).decision, 'deny');
+});
+
 test('dad cannot act on mom account without delegation', () => {
   assert.equal(ev('dad', 'mom', 'cancel_subscription', { subscription_ids: ['watcha'] }).decision, 'deny');
 });

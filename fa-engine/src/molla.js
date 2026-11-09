@@ -8,9 +8,9 @@ import { randomBytes } from 'node:crypto';
 import * as engine from './engine.js';
 import * as store from './store.js';
 import { evaluate, approvalState, ACTIONS } from './policy.js';
-import { nameOf, polish } from './family.js';
+import { nameOf, polish, getMember } from './family.js';
 import { connections } from './vault.js';
-import { vmState, won } from './vm.js';
+import { vmState, won, appendVmLog } from './vm.js';
 import { remember as rememberNote, logDecision } from './memory.js';
 
 export class MollaError extends Error {
@@ -24,7 +24,9 @@ const TERMINAL = new Set(['rejected', 'cancelled', 'prepared', 'needs_verificati
 const RUN_MS = Number(process.env.MOLLA_RUN_MS ?? 150);
 let S;
 
+let epoch = 0;
 export function resetMolla() {
+  epoch += 1; // timers from before a reset see a different epoch and stop
   S = {
     sessions: new Map(), // sid -> { actor }
     tasks: new Map(),
@@ -41,7 +43,7 @@ const N = (id) => nameOf(fam(), id);
 const nextId = (prefix) => `${prefix}_${(++S.seq).toString(36)}${randomBytes(3).toString('hex')}`;
 
 function member(id) {
-  const m = fam().members[id];
+  const m = getMember(fam(), id);
   if (!m || m.role === 'agent') return null;
   return { id: m.id, name: m.name, relation: m.relation, role: m.role };
 }
@@ -66,6 +68,13 @@ export function newSession(actor = 'son') {
   const sid = randomBytes(24).toString('hex');
   S.sessions.set(sid, { actor });
   return sid;
+}
+
+// Demo login for the chat UI (one session per phone). Not production auth.
+export function login(actor) {
+  const a = str(actor, 'actor', { max: 100 });
+  if (!member(a)) throw new MollaError(400, `Unknown demo actor: ${a}`);
+  return { session: newSession(a), me: member(a) };
 }
 
 export function actorOf(sid) {
@@ -130,9 +139,13 @@ function parseTask(owner, { text, draft, contactId }) {
   return { kind: 'general', action: { type: 'note', text: t }, policy: ['general_task', {}] };
 }
 
+const WHO_ID = { 엄마: 'mom', 어머니: 'mom', 아빠: 'dad', 아버지: 'dad', 승빈: 'son', 아들: 'son' };
+
 export function createTask(actor, body) {
   const text = str(body.text, 'text');
-  const owner = str(body.owner, 'owner', { required: false, max: 100 }) ?? actor;
+  // "엄마 계좌에서 …" names the account owner when --owner isn't given.
+  const fromText = text.match(/(엄마|어머니|아빠|아버지|승빈|아들)\s*(의)?\s*(통장|계좌)에서/)?.[1];
+  const owner = str(body.owner, 'owner', { required: false, max: 100 }) ?? (fromText ? WHO_ID[fromText] : actor);
   const draft = str(body.draft, 'draft', { required: false });
   const contactId = str(body.contactId, 'contactId', { required: false, max: 100 });
   if (!member(owner)) throw new MollaError(400, '대상을 확인할 수 없어요');
@@ -162,16 +175,27 @@ function isApprover(task, viewer) {
 }
 
 function viewTask(task, viewer) {
-  const { action, ...rest } = task;
-  const v = { ...rest, approvals: task.approvals, votes: { ...task.votes } };
-  // The exact action (address, amounts, recipients) is shown only to the people who decide.
+  const { action, evidence, ...rest } = task;
+  const v = { ...rest, approvals: task.approvals, votes: { ...task.votes }, evidence: evidence ?? null };
+  // The exact action and its artifact (address, amounts, recipients) are shown only to the people who decide.
   if (viewer === task.owner || isApprover(task, viewer)) v.action = action;
+  else if (evidence) v.evidence = { kind: evidence.kind, verified: evidence.verified, note: evidence.note ?? evidence.message };
   return v;
 }
 
 const KIND_OF = {
   cancel_subscription: 'subscription', order_item: 'order', transfer_money: 'transfer',
 };
+
+// Chat request status -> Molla task status. Only a finished, successful run is "prepared".
+function chatStatus(r) {
+  switch (r.status) {
+    case 'pending': return 'awaiting_approval';
+    case 'approved': return 'running'; // executing, or waiting for an account connection
+    case 'done': return 'prepared';
+    default: return r.status; // rejected | cancelled | failed
+  }
+}
 
 // Approval requests raised in the FA chat, presented as Molla tasks.
 function chatTasks() {
@@ -182,14 +206,16 @@ function chatTasks() {
     kind: KIND_OF[r.action] ?? 'general',
     text: polish(r.summary.title),
     action: { type: r.action, ...r.input },
-    status: r.status === 'pending' ? 'awaiting_approval'
-      : r.status === 'approved' ? (r.result ? 'prepared' : 'running')
-      : r.status,
+    status: chatStatus(r),
     tier: r.decision.tier,
     approvals: r.decision.approvals,
     votes: { ...r.votes },
     reason: r.decision.reason,
-    evidence: r.result ? { kind: 'local_draft', verified: true, artifact: r.result, note: '모의 VM 실행 기록이에요.' } : null,
+    evidence: r.status === 'done'
+      ? { kind: 'local_draft', verified: true, artifact: r.result, note: '모의 VM 실행 기록이에요.' }
+      : r.status === 'failed'
+        ? { kind: 'error', verified: false, message: r.result?.reason ?? '실행하지 못했어요.' }
+        : null,
     source: 'chat',
     roomId: r.roomId,
     createdAt: r.createdAt,
@@ -239,10 +265,14 @@ export async function decideTask(actor, body) {
   if (s === 'pending') return { task: viewTask(task, actor) };
 
   task.status = 'running';
-  setTimeout(() => runTask(task).catch((err) => {
-    task.status = 'failed';
-    task.evidence = { kind: 'error', verified: false, message: err.message };
-  }), RUN_MS);
+  const started = epoch;
+  setTimeout(() => {
+    if (started !== epoch) return; // the demo was reset meanwhile
+    runTask(task).catch((err) => {
+      task.status = 'failed';
+      task.evidence = { kind: 'error', verified: false, message: err.message };
+    });
+  }, RUN_MS);
   return { task: viewTask(task, actor) };
 }
 
@@ -267,11 +297,8 @@ async function decideChatTask(actor, id, decision) {
 // Approved Molla tasks produce a local draft. Nothing is bought, sent, or transferred.
 async function runTask(task) {
   const a = task.action;
-  const logToRooms = (text) => {
-    for (const room of store.allRooms().filter((r) => r.members.includes(task.owner))) {
-      store.emit(room.id, { type: 'vm.log', owner: task.owner, text: `[${N(task.owner)} VM] ${text}` });
-    }
-  };
+  // Draft steps go to the owner's VM log only, not into chat rooms (other members may not see the action).
+  const logToRooms = (text) => appendVmLog(task.owner, `[Molla] ${text}`);
   let artifact;
   let note;
   switch (a.type) {
@@ -437,6 +464,16 @@ export function setConsent(actor, body) {
   const value = str(body.value, 'value', { max: 10 });
   if (!['active', 'revoked'].includes(value)) throw new MollaError(400, 'Invalid argument: value');
   fam().consent[actor] = value;
+  if (value === 'revoked') {
+    // Pending requests from others stop too, on both surfaces.
+    engine.cancelRequestsFor(actor);
+    for (const t of S.tasks.values()) {
+      if (t.owner === actor && t.requester !== actor && t.status === 'awaiting_approval') {
+        t.status = 'cancelled';
+        t.updatedAt = Date.now();
+      }
+    }
+  }
   logDecision(`[Molla] ${N(actor)} consent → ${value}`);
   return { consent: value };
 }
@@ -458,7 +495,9 @@ export function acceptInvite(sid, body) {
   const id = `m_${code.toLowerCase()}`;
   const f = fam();
   if (!f.members[id]) {
-    f.members[id] = { id, name: invite.name, relation: '가족', role: 'guardian', avatar: '🙂' };
+    // Guests can chat and own their own data, but don't count as family for
+    // money co-signing or family transfers until the elders admit them.
+    f.members[id] = { id, name: invite.name, relation: '초대 손님', role: 'guest', avatar: '🙂' };
     f.delegations[id] = {};
     f.consent[id] = 'active';
   }

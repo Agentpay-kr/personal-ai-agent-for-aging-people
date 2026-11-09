@@ -5,7 +5,7 @@
 //   const rooms = useFaRooms(fa);
 
 import { useEffect, useMemo, useState } from 'react';
-import { createFaClient, applyEvent } from './fa-client.js';
+import { createFaClient, applyEvent, mergeSnapshot } from './fa-client.js';
 
 const BASE_URL =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FA_URL) || 'http://localhost:8787';
@@ -22,7 +22,9 @@ export function useFaRoom(fa, roomId) {
   useEffect(() => {
     if (!roomId) return undefined;
     let alive = true;
-    fa.messages(roomId).then((list) => alive && setEvents(list)).catch(() => {});
+    setEvents([]);
+    // Keep live events that arrive before the history snapshot loads.
+    fa.messages(roomId).then((list) => alive && setEvents((live) => mergeSnapshot(list, live))).catch(() => {});
     const stop = fa.subscribe((e) => {
       if (e.roomId !== roomId) return;
       if (e.type === 'typing') setTyping(Boolean(e.on));

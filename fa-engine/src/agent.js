@@ -153,6 +153,8 @@ export async function replyAsFa(args) {
     try {
       const reply = await replyWithClaude(args, state);
       if (reply !== null) return reply || null;
+      // Declined mid-turn after an action already went through: never replay it.
+      if (state.executed) return '처리 중에 멈췄어요. 위 카드 상태를 확인해 주세요.';
       console.warn('[FA] Claude declined the request; using scripted mode.');
     } catch (err) {
       if (err instanceof Anthropic.AuthenticationError) console.error('[FA] Invalid API key; using scripted mode.');

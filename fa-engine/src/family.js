@@ -27,14 +27,28 @@ export function seedFamily() {
   };
 }
 
+// Roles: elder / guardian are full family. "guest" (joined by invite) is a member
+// of the chat but can't co-sign money or receive family transfers until admitted.
+const FULL_FAMILY = new Set(['elder', 'guardian']);
+
+export function getMember(family, id) {
+  return typeof id === 'string' && Object.hasOwn(family.members, id) ? family.members[id] : null;
+}
+
+// A person (not the agent) who can log in and act.
+export function isPerson(family, id) {
+  const m = getMember(family, id);
+  return Boolean(m) && m.role !== 'agent';
+}
+
 export function familyMemberIds(family) {
   return Object.values(family.members)
-    .filter((m) => m.role !== 'agent')
+    .filter((m) => FULL_FAMILY.has(m.role))
     .map((m) => m.id);
 }
 
 export function nameOf(family, id) {
-  return family.members[id]?.name ?? id;
+  return getMember(family, id)?.name ?? id;
 }
 
 // Templates write "<name>님<particle>". Family titles read wrong with 님 ("엄마님이"),
