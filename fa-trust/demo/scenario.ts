@@ -2,7 +2,8 @@
  * FA trust core: the 90-second story, in the terminal.   Run: npm run demo
  * Every check below is real crypto (Shamir 2-of-3, Schnorr ZK, HKDF group keys, AES-GCM shredding).
  */
-import { DAY_MS, decryptText, FamilyTrust, MemberDevice } from '../src/index';
+import { DAY_MS, decryptText, FamilyTrust, heuristicJudge, MemberDevice, withFallback } from '../src/index';
+import { createClaudeJudge } from '../src/judge-claude';
 
 const paint = (code: number) => (s: string) => `\x1b[${code}m${s}\x1b[0m`;
 const bold = paint(1);
@@ -14,7 +15,16 @@ const cyan = paint(36);
 
 const clock = { t: Date.parse('2026-11-09T12:00:00+09:00') };
 
+// FA_JUDGE=claude → Claude judges every request (offline judge takes over if a call fails).
+const useClaude = process.env.FA_JUDGE === 'claude';
+const judge = useClaude
+  ? withFallback(createClaudeJudge(), heuristicJudge, (e) =>
+      console.log(`  ${dim(`(Claude 심판 호출 실패 → 오프라인 심판으로 대체: ${(e as Error).message})`)}`),
+    )
+  : heuristicJudge;
+
 const trust = new FamilyTrust({
+  judge,
   familyId: 'our-family',
   members: [
     { id: 'mom', name: '엄마', role: 'parent' },
@@ -33,6 +43,14 @@ let n = 0;
 const step = (title: string) => console.log(`\n${bold(yellow(`━━ ${++n}. ${title}`))}`);
 const say = (who: string, text: string) => console.log(`  ${bold(who)}  ${text}`);
 const note = (text: string) => console.log(`  ${dim(text)}`);
+
+console.log(
+  dim(
+    useClaude
+      ? '\nAI 심판: Claude (claude-opus-5-5, effort low, 거절 시 서버 측 대체 모델) + 실패 시 오프라인 심판'
+      : '\nAI 심판: 오프라인 심판 (FA_JUDGE=claude 로 실행하면 Claude가 판정해요)',
+  ),
+);
 
 step('가족 단톡방 + 기기 등록 (ZK 신원)');
 const mom = trust.createDevice('mom');
@@ -126,6 +144,31 @@ await trust.linkAccount('mom', 'coupang', 'coupang-session-cookie-2', { ttlDays:
 clock.t += 31 * DAY_MS;
 note('… 31일 후');
 await trust.tick();
+
+step('AI 심판 ①: 통화 중에 들어온 송금 → 규칙은 승인 대기, 심판은 보류');
+say('엄마', '아들 학원비 30만원 보내야 해');
+note('라우터 메타데이터: 엄마가 지금 통화 중 (callActive: true)');
+await trust.request(
+  mom,
+  { owner: 'mom', kind: 'transfer', amountKRW: 300_000, payee: '신한 110-000-0000', summary: '30만원 송금', text: '아들 학원비 30만원 보내야 해' },
+  { metadata: { actor: 'mom', owner: 'mom', intent: 'transfer', channel: 'kakao', callActive: true } },
+);
+
+step('AI 심판 ②: 라우터는 "조회"로 분류했는데 송금이 올라옴 → 차단');
+note('원문: "엄마 구독 목록 좀 보여줘" · 라우터 intent: scan');
+await trust.request(
+  son,
+  { owner: 'mom', kind: 'transfer', amountKRW: 900_000, payee: '하나 000-0000', summary: '90만원 송금' },
+  { metadata: { actor: 'son', owner: 'mom', intent: 'scan', confidence: 0.9 }, rawData: ['엄마 구독 목록 좀 보여줘'] },
+);
+
+step('AI 심판 ③: 규칙의 오탐을 풀어줌 (승인 절차는 그대로)');
+say('엄마', '오늘 안에 관리비 120만원 내야 해');
+await trust.request(
+  mom,
+  { owner: 'mom', kind: 'transfer', amountKRW: 1_200_000, payee: '○○아파트 관리사무소', summary: '관리비 120만원', text: '오늘 안에 관리비 120만원 내야 해' },
+  { metadata: { actor: 'mom', owner: 'mom', intent: 'transfer', confidence: 0.95 } },
+);
 
 step('아빠가 단톡방을 나감 → 가족 키 재발급');
 const oldFamilyKey = trust.keys.familyKey();

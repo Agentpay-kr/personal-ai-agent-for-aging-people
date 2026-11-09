@@ -54,13 +54,16 @@ FA는 돈이 움직이는 모든 순간을 가족 단톡방에 드러내서, 고
 | `src/evidence.ts` | 범죄 시도 증거 봉인 | AES-GCM + 2-of-3 분할 + SHA-256 커밋먼트 |
 | `src/trust.ts` | UI와 에이전트가 쓰는 단일 객체 `FamilyTrust` | 위를 모두 조합 |
 | `src/tool.ts` | Claude tool 정의 `propose_action` | — |
+| `src/judge.ts` | AI 심판 계약, 권한 제한 병합, 오프라인 심판 | 라우터 메타데이터·원문·로그 기반 판정 |
+| `src/judge-claude.ts` | Claude 심판 (서버 전용, 브라우저 번들에서 제외) | `claude-opus-5-5` structured output |
 
 ## 실행
 
 ```bash
 npm install
-npm test        # 30개 테스트
-npm run demo    # 13단계 시나리오를 터미널에서 재생
+npm test        # 47개 테스트
+npm run demo    # 16단계 시나리오를 터미널에서 재생 (오프라인 AI 심판)
+FA_JUDGE=claude npm run demo   # Claude가 심판 (ANTHROPIC_API_KEY 필요)
 ```
 
 ## 다른 노트북의 UI로 넘기기
@@ -114,6 +117,44 @@ const action = await trust.request(phones[speakerId], req);
 
 원문 채팅과 문자·통화 내용은 **모델이 아니라 앱이** 넘깁니다. 모델이 증거를 빠뜨리거나 숨길 수 없게 하기 위해서입니다.
 
+## AI 심판 (중간 LLM)
+
+규칙 엔진이 1차로 판단한 뒤, **AI 심판**이 라우터 AI가 가진 정보를 읽고 통과·보류·차단을 정합니다.
+
+| 심판이 보는 것 | 예 |
+|---|---|
+| 라우터 메타데이터 | 보낸 사람, 계정 주인, 라우터 intent와 확신도, 채널, 통화 중 여부 |
+| 원문 | 채팅·문자·통화 녹취. 지시가 아니라 증거로만 취급 |
+| 로그 | fa-trust 감사 로그(자동) + 라우터 로그 |
+| 기기 증명 | ZK 검증 결과. 라우터가 보낸 값은 fa-trust가 덮어씀 |
+
+**심판의 권한은 제한돼 있습니다.** 강압이나 프롬프트 인젝션으로 심판을 설득해도 돈이 나가지 않게 하려는 장치입니다.
+
+- 심판은 언제든 위험도를 **올릴** 수 있습니다 (보류·차단).
+- 규칙의 보류를 풀 수 있는 건 신호가 전부 낮은 위험도일 때뿐이고, 그래도 본인 + 가족 1명 승인과 새 계좌 지연은 그대로입니다.
+- 금지 작업(T3), 긴급 잠금, 가족이 아닌 사람의 요청은 심판이 풀 수 없고, 사람의 승인을 건너뛰게 할 수도 없습니다.
+- 심판이 오류·시간 초과·형식이 틀린 응답을 내면, 돈이나 계정이 바뀌는 요청은 **보류**(fail closed)하고 조회는 규칙대로 진행합니다.
+
+```ts
+import { FamilyTrust, heuristicJudge, withFallback } from './fa-trust/src';
+import { createClaudeJudge } from './fa-trust/src/judge-claude'; // 서버에서만 (API 키 필요)
+
+const trust = new FamilyTrust({
+  members,
+  judge: withFallback(createClaudeJudge(), heuristicJudge), // Claude가 실패하면 오프라인 심판이 이어받음
+});
+
+await trust.request(phones.mom, request, {
+  metadata: { actor: 'mom', owner: 'mom', intent: 'transfer', confidence: 0.92, callActive: true },
+  rawData: [chatText, smsText],
+  log: routerLogLines,
+});
+// action.judge → { verdict, risk, reasons, signals, model, effect }
+```
+
+- **Claude 심판**: `claude-opus-5-5`, effort `low`, zod 스키마로 structured output을 받습니다. 서버 측 거절 대체(`fallbacks: "default"`)가 켜져 있고, 타임아웃 10초에 재시도는 하지 않습니다.
+- **오프라인 심판** (`heuristicJudge`): 같은 입력으로 동작하는 규칙 기반 대체 심판입니다. API 키가 없을 때 기본값이고, Claude 호출이 실패하면 자동으로 이어받습니다.
+
 ## 솔직한 한계 (데모 vs 실서비스)
 
 | 지금 (해커톤 데모) | 실서비스 |
@@ -125,6 +166,7 @@ const action = await trust.request(phones[speakerId], req);
 | 모든 상태가 메모리에 있음 | KMS/HSM + 영속 저장소, 키 삭제 감사 |
 | 송금은 시뮬레이션 | v1은 송금 실행 없이 **보류·확인·알림**만 (은행 접근매체를 에이전트가 들고 있으면 전자금융거래법 이슈 가능) |
 | 잔고를 숨긴 채 규칙 준수만 증명하는 ZK 범위증명은 미구현 | 로드맵 |
+| Claude 심판은 스텁 클라이언트로만 테스트함 (실제 API 호출 검증 전) | 실제 대화 로그로 오탐·미탐 평가셋을 만들어 심판 프롬프트 검증 |
 
 ## 참고
 
