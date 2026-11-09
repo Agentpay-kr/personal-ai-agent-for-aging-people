@@ -215,7 +215,7 @@ export function detectSignals(
     signals.push({ id: 'self_dealing', label: '요청한 사람 본인 계좌로 이체', severity: 'medium', evidence: req.payeeOwner });
   }
   if (req.requester !== req.owner && !requesterVerified) {
-    signals.push({ id: 'unverified_requester', label: '등록된 기기의 증명이 없는 요청', severity: 'high', evidence: req.requester });
+    signals.push({ id: 'unverified_requester', label: '등록된 폰에서 오지 않은 요청', severity: 'high', evidence: req.requester });
   }
   if ((req.llmRiskScore ?? 0) >= policy.llmHoldThreshold) {
     signals.push({ id: 'llm_flag', label: 'AI 분류기가 사기로 의심', severity: 'high', evidence: `score ${req.llmRiskScore}` });
@@ -246,7 +246,7 @@ export function evaluate(req: ActionRequest, opts: EvaluateOptions = {}): Decisi
       reasons: [
         `⛔ "${forbidden}"${josa(forbidden, '은/는')} FA가 누구의 승인으로도 실행하지 않는 작업이에요. 실제 사기에서 가장 많이 쓰이는 수법이에요.`,
         ...(signals.length > 0 ? ['함께 발견된 신호:', ...signalLines] : []),
-        '가족 모두에게 알리고 기록을 봉인했어요.',
+        '가족 모두에게 알리고 기록을 잠가서 보관했어요.',
       ],
       notifyFamily: true,
       sealEvidence: true,
@@ -327,7 +327,7 @@ export function evaluate(req: ActionRequest, opts: EvaluateOptions = {}): Decisi
   const coolingOffMinutes = newPayee ? policy.newPayeeCoolingOffMinutes : 0;
   const reasons = [
     needsSecond
-      ? `🔐 "${what}"${josa(what, '은/는')} 되돌릴 수 없어서 ${name(req.owner)} 본인 승인 + 가족 1명 확인(2-of-3)이 필요해요.`
+      ? `🔐 "${what}"${josa(what, '은/는')} 되돌릴 수 없어서 ${name(req.owner)} 본인 승인 + 가족 1명 확인이 필요해요.`
       : `🔐 "${what}"${josa(what, '은/는')} 되돌릴 수 없어서 ${name(req.owner)} 본인 승인이 필요해요.`,
   ];
   if (selfDealing) {

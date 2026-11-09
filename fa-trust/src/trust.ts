@@ -307,9 +307,9 @@ export class FamilyTrust {
 
     let decision: Decision;
     if (!isMember) {
-      decision = blocked('등록된 가족 기기가 아닌 곳에서 온 요청이라 처리하지 않았어요.', true);
+      decision = blocked('등록된 가족 폰이 아닌 곳에서 온 요청이라 처리하지 않았어요.', true);
     } else if (this.#frozen && request.kind !== 'read') {
-      decision = blocked('🔒 긴급 잠금 중이라 조회 말고는 아무것도 실행하지 않아요. 가족 2명이 기기로 해제해야 해요.', false);
+      decision = blocked('🔒 긴급 잠금 중이라 보는 것 말고는 아무것도 실행하지 않아요. 가족 2명이 등록된 폰으로 풀어야 해요.', false);
     } else {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
@@ -376,7 +376,7 @@ export class FamilyTrust {
           ...decision,
           reasons: [
             ...decision.reasons,
-            `🚫 ${excludedNames}${josa(excludedNames, '은/는')} 요청했거나 돈을 받는 사람이라 승인자로 셀 수 없어요. ` +
+            `🚫 ${excludedNames}${josa(excludedNames, '은/는')} 요청했거나 돈을 받는 사람이라 승인할 수 없어요. ` +
               `${eligible.map((m) => this.name(m)).join('·')} 중 ${decision.approvalsRequired}명의 기기 승인이 필요해요.`,
           ],
         };
@@ -426,7 +426,7 @@ export class FamilyTrust {
       this.audit.append('proof_failed', memberId, '승인 기기 증명 실패', { requestId });
       this.#emit(
         'proof_failed',
-        `⚠️ "${this.name(memberId)}" 이름으로 승인이 왔지만 등록된 기기의 ZK 증명이 아니에요. 무시하고 기록했어요.`,
+        `⚠️ "${this.name(memberId)}" 이름으로 승인이 왔지만 등록된 폰에서 온 게 아니에요. 무시하고 기록했어요.`,
         requestId,
       );
       await this.#onImpostor(a, memberId);
@@ -455,7 +455,7 @@ export class FamilyTrust {
     this.audit.append('approval', memberId, `승인: ${a.request.summary ?? a.request.kind}`, { requestId });
     this.#emit(
       'approval',
-      `👍 ${this.name(memberId)} 승인 (${a.approvals.length}/${Math.max(1, a.decision.approvalsRequired)}) · 🔐 기기 증명됨`,
+      `👍 ${this.name(memberId)} 승인 (${a.approvals.length}/${Math.max(1, a.decision.approvalsRequired)}) · 🔐 등록된 폰 확인됨`,
       requestId,
     );
     await this.#progress(a);
@@ -479,7 +479,7 @@ export class FamilyTrust {
     const a = this.#get(requestId);
     if (!this.verifyProof(memberId, proof, this.context(memberId, 'reject', requestId))) {
       this.audit.append('proof_failed', memberId, '거절 기기 증명 실패', { requestId });
-      this.#emit('proof_failed', '⚠️ 등록된 기기가 아닌 곳에서 온 거절이라 무시했어요.', requestId);
+      this.#emit('proof_failed', '⚠️ 등록된 폰이 아닌 곳에서 온 거절이라 무시했어요.', requestId);
       await this.#onImpostor(a, memberId);
       return a;
     }
@@ -513,7 +513,7 @@ export class FamilyTrust {
         this.audit.append('session_expired', 'system', `${link.owner}/${link.service} 세션 기한 만료 → 소멸`);
         this.#emit(
           'expired',
-          `⏳ ${this.name(link.owner)}의 ${serviceLabel(link.service)} 연결이 기한이 지나 스스로 소멸했어요. 필요하면 다시 연결하세요.`,
+          `⏳ ${this.name(link.owner)}의 ${serviceLabel(link.service)} 연결이 기한이 지나 저절로 끊겼어요. 필요하면 다시 연결하세요.`,
         );
       }
     }
@@ -575,7 +575,7 @@ export class FamilyTrust {
       [
         `✅ ${this.name(owner)}의 ${serviceLabel(service)} 연결 완료`,
         `🔐 열쇠 3조각(${this.name(owner)} 폰 / FA 서버 / ${this.name(guardian)} 폰) 중 2개가 모여야 열려요`,
-        `⏳ ${ttlDays}일 뒤 자동 소멸 · 비밀번호는 저장하지 않아요`,
+        `⏳ ${ttlDays}일 뒤 저절로 끊겨요 · 비밀번호는 저장하지 않아요`,
       ].join('\n'),
     );
     return this.linkedAccounts().find((l) => l.slot === slot)!;
@@ -648,11 +648,11 @@ export class FamilyTrust {
     this.#emit(
       'self_destruct',
       [
-        `💥 외부 침해(${intrusionKinds(intrusions)}) 감지 → FA 자동 소멸`,
+        `💥 외부 공격(${intrusionKinds(intrusions)})을 발견해서 FA가 스스로 작동을 멈춰요`,
         ...intrusions.map((i) => `• 원인: ${i.label}`),
         `• 연결된 서비스 ${slots}개의 세션과 열쇠 조각 소멸 → 에이전트가 어떤 계정도 열 수 없어요`,
         `• 진행 중이던 요청 ${cancelled}건, 작업 데이터 ${taskRecords}건 소멸`,
-        `• 가족 기억 ${memories}건 소멸 (오염됐을 수 있어서 남기지 않아요)`,
+        `• 가족 기억 ${memories}건을 지움 (조작됐을 수 있어서 남기지 않아요)`,
         `• 가족 키 재발급 (epoch ${this.keys.epoch})`,
         '• 남은 것: 봉인된 증거와 감사 기록뿐이에요. 다시 쓰려면 가족 2명이 기기로 확인하고 서비스를 새로 연결해야 해요.',
       ].join('\n'),
@@ -699,7 +699,7 @@ export class FamilyTrust {
       if (this.verifyProof(ap.memberId, ap.proof, this.unlockContext(ap.memberId))) ok.add(ap.memberId);
     }
     if (ok.size < 2) {
-      this.#emit('unlock_denied', `🔒 해제하려면 서로 다른 가족 2명의 기기 증명이 필요해요 (${ok.size}/2).`);
+      this.#emit('unlock_denied', `🔒 풀려면 서로 다른 가족 2명이 등록된 폰으로 확인해야 해요 (${ok.size}/2).`);
       return false;
     }
     this.#frozen = false;
@@ -740,7 +740,7 @@ export class FamilyTrust {
         : `${remover}${josa(remover, '이/가')} ${name}${josa(name, '을/를')} 내보냈어요`;
     this.#emit(
       'member_removed',
-      `👋 ${what} → 🔑 가족 키 재발급 (epoch ${this.keys.epoch}). 나간 사람은 이후 기록을 볼 수 없어요.`,
+      `👋 ${what} → 🔑 가족 열쇠를 새로 만들었어요. 나간 사람은 이후 기록을 볼 수 없어요.`,
     );
   }
 
@@ -798,7 +798,7 @@ export class FamilyTrust {
           sha256(utf8(JSON.stringify({ id, owner, purpose, outcome, stored, at: this.#now() }))),
         ).slice(0, 16);
         this.audit.append('task_finished', 'fa_agent', `작업 종료 · 데이터 ${shredded.length}건 소멸`, { task: id, receipt });
-        this.#emit('shredded', `🔥 작업 데이터 ${shredded.length}건 소멸 · 남은 건 영수증 #${receipt.slice(0, 8)} 하나`);
+        this.#emit('shredded', `🔥 작업 기록 ${shredded.length}건을 지웠어요 · 남은 건 영수증 #${receipt.slice(0, 8)} 하나`);
         return receipt;
       },
     };
@@ -859,7 +859,7 @@ export class FamilyTrust {
     try {
       serverShare = JSON.parse(await this.vault.getText(link.serverShareRecord)) as Share;
     } catch (e) {
-      if (e instanceof ShreddedError) throw new Error(`${serviceLabel(service)} 연결 열쇠가 소멸됐어요 (${e.reason})`);
+      if (e instanceof ShreddedError) throw new Error(`${serviceLabel(service)} 연결 열쇠를 이미 지웠어요 (${e.reason})`);
       throw e;
     }
     const deviceShare = deviceShares.find((s) => s.holder !== FA_SERVER && link.holders.includes(s.holder ?? ''));
@@ -879,7 +879,7 @@ export class FamilyTrust {
     if (req.payeeOwner !== undefined && member === req.payeeOwner && member !== req.owner) {
       return '돈을 받는 사람은 승인할 수 없어요.';
     }
-    if (member === req.requester && member !== req.owner) return '요청한 사람은 승인자로 셀 수 없어요.';
+    if (member === req.requester && member !== req.owner) return '요청한 사람은 승인할 수 없어요.';
     return null;
   }
 
@@ -910,12 +910,12 @@ export class FamilyTrust {
       ...a.decision,
       approvalsRequired: Math.min(a.decision.approvalsRequired + 1, this.#eligibleApprovers(a.request).length),
       notifyFamily: true,
-      reasons: [...a.decision.reasons, '🎭 사칭 승인 시도가 있어서 가족 1명의 기기 확인이 더 필요해요.'],
+      reasons: [...a.decision.reasons, '🎭 누군가 가족인 척 승인하려 해서 가족 1명이 등록된 폰으로 더 확인해야 해요.'],
     };
     this.#emit(
       'family_alert',
       `👨‍👩‍👦 가족 전체 알림: "${this.name(claimed)}" 사칭 승인 시도 감지 → "${a.request.summary ?? a.request.kind}" 보류` +
-        `${wasScheduled ? ' (예약 실행 취소)' : ''}. 이제 가족 ${a.decision.approvalsRequired}명의 기기 확인이 필요해요. 더 시도되면 FA를 자동 소멸시켜요.`,
+        `${wasScheduled ? ' (예약 실행 취소)' : ''}. 이제 가족 ${a.decision.approvalsRequired}명이 등록된 폰으로 확인해야 해요. 더 시도되면 FA가 스스로 작동을 멈춰요.`,
       a.id,
     );
     if (!a.evidenceId) a.evidenceId = await this.#sealEvidence(a);
@@ -943,7 +943,7 @@ export class FamilyTrust {
     for (const share of ev.shares) if (share.holder) this.#deliverShare(share.holder, evidenceSlot(ev.id), share, false);
     this.#evidence.set(ev.id, { ...ev, shares: [] });
     this.audit.append('evidence_sealed', 'fa_agent', `증거 봉인 ${ev.id}`, { requestId: a.id, commitment: ev.commitment });
-    this.#emit('evidence', '🧾 이 시도의 기록을 가족 2-of-3 열쇠로 봉인했어요 (자동 소멸 대상 아님 · 신고할 때 제출용).', a.id);
+    this.#emit('evidence', '🧾 이 시도의 기록을 가족 열쇠로 잠가서 보관했어요 (저절로 지워지지 않아요 · 신고할 때 내는 용도).', a.id);
     return ev.id;
   }
 

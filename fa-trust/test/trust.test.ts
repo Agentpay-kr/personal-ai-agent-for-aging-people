@@ -77,7 +77,7 @@ test('beneficiary exclusion: dad asking for mom\'s money to himself needs mom + 
   const a = await trust.request(dad, { owner: 'mom', kind: 'transfer', service: 'bank', amountKRW: 500_000, payee: '아빠 계좌', payeeOwner: 'dad', summary: '엄마 → 아빠 50만원' });
   assert.equal(a.status, 'pending');
   assert.deepEqual(a.approvals, []);
-  assert.ok(a.decision.reasons.some((r) => r.includes('승인자로 셀 수 없어요')));
+  assert.ok(a.decision.reasons.some((r) => r.includes('승인할 수 없어요')));
 
   await trust.approveWith(dad, a.id);
   assert.deepEqual(a.approvals, []);
