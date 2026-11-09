@@ -1,39 +1,54 @@
-/* fa-trust panel (docked right of the chat) */
-:root { --trust-width: 360px; }
-.trust-toggle { display: inline-flex; align-items: center; gap: 4px; }
-.trust-toggle[aria-pressed="true"] { background: #201d1b; color: #fff; }
-.trust-badge { background: #e5484d; color: #fff; border-radius: 999px; font-size: 10px; padding: 1px 6px; line-height: 1.4; }
+/* fa-trust panel: opens when FA is tapped in a chat */
 
-.trust-panel { display: none; }
-body.trust-open .shell { margin-right: var(--trust-width); }
-body.trust-open .trust-panel {
-  display: flex; flex-direction: column; position: fixed; right: 0; top: 49px; bottom: 0; width: var(--trust-width);
-  background: #fbfaf9; border-left: 1px solid #e6e3e1; box-shadow: -6px 0 18px rgba(0, 0, 0, .05); z-index: 3;
-  font-family: var(--font); color: var(--ink); overflow: hidden;
+/* FA's profile, name and bubble are tappable */
+article.message.theirs[aria-label^="FA의"] > .avatar,
+article.message.theirs[aria-label^="FA의"] .sender,
+article.message.theirs[aria-label^="FA의"] .bubble,
+.drawer-bot { cursor: pointer; }
+article.message.theirs[aria-label^="FA의"] > .avatar { position: relative; }
+/* Small shield hint on FA's profile when there are new security records */
+body.trust-unseen article.message.theirs[aria-label^="FA의"] .sender::after {
+  content: '🛡️ 새 보안 기록'; margin-left: 6px; font-size: 10px; font-weight: 600;
+  color: #b42318; background: #fff1f0; border-radius: 999px; padding: 1px 6px;
 }
-.trust-head { padding: 16px 18px 10px; border-bottom: 1px solid var(--line); }
-.trust-head strong { font-size: 15px; }
-.trust-head p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
-.trust-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 18px; }
-.trust-chip { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
-.trust-chip span { font-size: 11px; color: var(--muted); }
-.trust-chip strong { font-size: 13px; }
-.trust-chip.warn { border-color: #f3c4c4; background: #fff6f6; }
-.trust-demo { padding: 0 18px 10px; }
-.trust-impostor { width: 100%; border: 1px dashed #c9c4bf; background: #fff; border-radius: 8px; padding: 8px; font: inherit; font-size: 12px; cursor: pointer; color: #4c4743; }
-.trust-impostor:hover { background: #f3f1ef; }
-.trust-events { list-style: none; margin: 0; padding: 4px 18px 18px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
-.trust-event { background: #fff; border: 1px solid var(--line); border-left: 3px solid #b9b3ad; border-radius: 8px; padding: 8px 10px; }
-.trust-event-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; }
-.trust-event-head time { font-weight: 400; color: var(--muted); font-size: 11px; }
-.trust-event p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: #3d3935; }
-.trust-event.type-decision { border-left-color: #3b82f6; }
-.trust-event.type-family_alert, .trust-event.type-scheduled { border-left-color: #f59e0b; }
-.trust-event.type-approval, .trust-event.type-executed, .trust-event.type-unlocked, .trust-event.type-linked { border-left-color: #22a06b; }
-.trust-event.type-evidence, .trust-event.type-shredded { border-left-color: #8b5cf6; }
-.trust-event.type-proof_failed, .trust-event.type-lockdown, .trust-event.type-rejected { border-left-color: #e5484d; }
-.trust-empty { font-size: 12px; color: var(--muted); line-height: 1.6; padding: 12px 0; }
-@media (max-width: 900px) {
-  body.trust-open .shell { margin-right: 0; }
-  body.trust-open .trust-panel { width: min(100vw, var(--trust-width)); }
+
+.trust-sheet-root[hidden] { display: none; }
+.trust-sheet-root { position: fixed; inset: 0; z-index: 20; font-family: var(--font); color: var(--ink); }
+.trust-backdrop { position: absolute; inset: 0; background: rgba(20, 18, 16, .28); }
+.trust-sheet {
+  position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+  width: min(420px, calc(100vw - 32px)); max-height: min(78vh, 680px); overflow-y: auto;
+  background: #fff; border-radius: 18px; box-shadow: 0 18px 50px rgba(0, 0, 0, .22); padding: 16px 18px 18px;
 }
+.trust-sheet header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.trust-sheet header strong { font-size: 15px; }
+.trust-close { border: 0; background: #f3f1ef; border-radius: 999px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; }
+
+.trust-status { border-radius: 14px; padding: 14px 14px 12px; }
+.trust-status strong { font-size: 18px; display: block; }
+.trust-status p { margin: 4px 0 0; font-size: 13px; color: #4c4743; }
+.trust-status.ok { background: #ecfdf3; }
+.trust-status.warn { background: #fffaeb; }
+.trust-status.danger { background: #fef3f2; }
+
+.trust-facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+.trust-facts span { font-size: 11px; background: #f6f5f4; border-radius: 999px; padding: 3px 8px; color: #4c4743; }
+
+.trust-sheet h3 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 14px 0 6px; }
+.trust-recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.trust-recent li { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: start; background: #fbfaf9; border-radius: 10px; padding: 8px 10px; }
+.trust-ico { font-size: 18px; line-height: 1.2; }
+.trust-recent strong { font-size: 13px; }
+.trust-recent p { margin: 2px 0 0; font-size: 12px; color: #4c4743; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
+.trust-recent time { font-size: 11px; color: var(--muted); }
+.trust-none { font-size: 12px; color: var(--muted); display: block !important; }
+
+.trust-more { width: 100%; margin-top: 10px; border: 0; background: #f6f5f4; border-radius: 10px; padding: 9px; font: inherit; font-size: 13px; cursor: pointer; }
+.trust-details { margin-top: 10px; }
+.trust-all { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.trust-all li { border-left: 3px solid #d6d1cc; padding: 4px 8px; }
+.trust-all-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; }
+.trust-all-head time { font-weight: 400; color: var(--muted); font-size: 11px; }
+.trust-all p { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: #3d3935; }
+.trust-impostor { width: 100%; margin-top: 10px; border: 1px dashed #c9c4bf; background: #fff; border-radius: 10px; padding: 8px; font: inherit; font-size: 12px; cursor: pointer; }
+.trust-note, .trust-off { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
