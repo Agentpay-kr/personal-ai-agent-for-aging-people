@@ -64,13 +64,13 @@ fa-engine 쪽 UI로 찍는다면: 구독 4건·월 40,090원 카드 → 왓챠·
 
 ## 장면 5 · 1:32–1:47 · 기술 (슬라이드 1장)
 
-**화면:** 슬라이드 1장. 왼쪽에 흐름 `LLM proposes → policy gate → owner + 1 family (2-of-3) → owner's VM → crypto-shred`, 오른쪽에 `Shamir 2-of-3 · Schnorr ZK device proof · hash-chained audit · 158 tests`. 슬라이드 대신 터미널 세 개에 `npm test` 결과를 나란히 띄워도 돼요.
+**화면:** 슬라이드 1장. 왼쪽에 흐름 `LLM proposes → policy gate → owner + 1 family (2-of-3) → owner's VM → crypto-shred`, 오른쪽에 `Shamir 2-of-3 · Schnorr ZK device proof · hash-chained audit · 191 tests`. 슬라이드 대신 터미널 세 개에 `npm test` 결과를 나란히 띄워도 돼요.
 
-완성된 슬라이드: [slide/tech-slide.png](slide/tech-slide.png) (원본 [slide/tech-slide.html](slide/tech-slide.html), 1920×1080). 158개 = fa-trust 30 + fa-engine 26 + fa-kakao-demo 21 + molla-cli 15 (네 개는 직접 돌려 확인) + molla-app 서버 66 (PR #8 설명 기준, 직접 돌리진 않음). 녹화 전에 숫자가 바뀌었으면 슬라이드 HTML의 `158`과 내레이션·자막을 같이 고치고 다시 렌더해요.
+완성된 슬라이드: [slide/tech-slide.png](slide/tech-slide.png) (원본 [slide/tech-slide.html](slide/tech-slide.html), 1920×1080). 191개 = main(`feafc64`, PR #12까지) 기준 fa-trust 50 + fa-engine 26 + fa-kakao-demo 24 + molla-cli 25 (네 개는 직접 돌려 확인) + molla-app 서버 66 (PR #8 설명 기준, 직접 돌리진 않음). PR #10이 머지되면 fa-trust가 52개로 늘어요. 녹화 전에 숫자가 바뀌었으면 슬라이드 HTML의 `191`과 내레이션·자막을 같이 고치고 다시 렌더해요.
 
-**말 (EN):** Under the hood, the LLM only proposes; code decides. Session keys are split three ways, so even our server can't act alone, ⟦and task data is shredded when the job is done⟧. 158 tests, all written today.
+**말 (EN):** Under the hood, the LLM only proposes; code decides. Session keys are split three ways, so even our server can't act alone, ⟦and task data is shredded when the job is done⟧. 191 tests, all written today.
 
-**뜻 (KR):** 내부에서는 LLM이 제안만 하고, 실행 여부는 코드가 정해요. 세션 키는 세 조각으로 나뉘어서 저희 서버도 혼자서는 못 움직이고, 작업이 끝나면 데이터는 소멸해요. 테스트 158개, 전부 오늘 썼어요.
+**뜻 (KR):** 내부에서는 LLM이 제안만 하고, 실행 여부는 코드가 정해요. 세션 키는 세 조각으로 나뉘어서 저희 서버도 혼자서는 못 움직이고, 작업이 끝나면 데이터는 소멸해요. 테스트 191개, 전부 오늘 썼어요.
 
 ## 장면 6 · 1:47–2:00 · 마무리 (얼굴)
 
@@ -117,7 +117,7 @@ I type: "Mom, let's clean up your subscriptions." Only Mom's own phone can link 
 
 Now, money. Dad asks FA to move 500,000 won from Mom's account to his. Locked. Money needs the owner plus one more family member, and whoever receives it can't approve it. Then a "prosecutor" calls Mom: move three million won to a safe account, don't tell your family. FA holds the transfer, alerts the family, and seals the evidence. Scams win by isolation. An agent in the family chat breaks it by design.
 
-Under the hood, the LLM only proposes; code decides. Session keys are split three ways, so even our server can't act alone, and task data is shredded when the job is done. 158 tests, all written today.
+Under the hood, the LLM only proposes; code decides. Session keys are split three ways, so even our server can't act alone, and task data is shredded when the job is done. 191 tests, all written today.
 
 Korea lost 1.26 trillion won, almost a billion dollars, to voice phishing last year. Caring for our parents with AI starts in the family chat. FA: AI help for parents, with family guardrails.
 ```
