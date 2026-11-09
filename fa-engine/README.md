@@ -171,36 +171,14 @@ await mom.approve(requestId);                                         // 엄마 
 5. 엄마가 탭하면 해지가 끝나고 "매달 17,300원 절약"이 표시돼요.
 6. 아빠: "엄마의 계좌에서 50만원만 내 계좌로 옮겨줘" → 🔒 엄마 + 승빈 승인 필요. 아빠는 승인할 수 없어요.
 
-## Molla 호환 API
+## Molla v0.1 HTTP 호환 API (레거시)
 
-이 저장소의 [Molla CLI와 라우터 스킬](../molla-cli/README.md)이 이 엔진을 "Molla 앱 서버"로 그대로 쓸 수 있어요.
-`npm start`를 실행하면 FA API(:8787)와 함께 **:4328(Molla CLI 기본 포트)**에서도 같은 엔진이 열려요.
+FA 엔진은 Molla CLI **v0.1**의 HTTP 계약(`molla_session` 쿠키, `/api/state`, `/api/tasks`, `/api/task/decision` 등)도 함께 제공해요.
+`npm start`를 실행하면 FA API(:8787)와 함께 :4328에서도 같은 엔진이 열려요.
 
-```bash
-npm start
-node ../molla-cli/bin/molla.mjs demo login --actor mom --session .local/mom.json
-node ../molla-cli/bin/molla.mjs task list --session .local/mom.json
-```
-
-- **구현한 연산**: Molla CLI allowlist 전부(health, identity, family invite/join, task create/list/get/decide, memory 7종, contact 3종, ontology, vm diagnose/compose plan, consent).
-- **세션**: `/api/health`가 `molla_session` 쿠키를 발급하고, `/api/demo/switch`로 데모 사용자를 고르면 돼요. 운영 인증은 아니에요.
-- **권한**: Molla 작업도 같은 `policy.js`를 거쳐요. 동의를 철회하면 다른 가족의 요청은 403이에요. 송금 작업은 2-of-3 가족 승인이 필요해요.
-- **한 엔진, 두 화면**: 카톡 채팅에서 생긴 승인 요청이 Molla 작업(`source: "chat"`)으로도 보여요. CLI로 승인하면 채팅에서 실행돼요.
-- **결과 표시**: Molla 규약대로, 승인된 작업은 `prepared` + `evidence.kind: "local_draft"`(구매·전송·이체 아님)로 끝나요.
-- **action 공개 범위**: 작업의 정확한 `action`(주소, 금액, 받는 사람)은 결정하는 사람(계정 주인, 공동 승인자)에게만 보여요.
-
-검증:
-
-```bash
-# molla-cli 테스트 13개(실제 API 통합 테스트 포함)를 이 엔진에 실행
-cd ../molla-cli
-FA_ENGINE_DIR=$PWD/../fa-engine MOLLA_TEST_APP_DIR=$PWD/../fa-engine/molla-shim node --test tests/*.test.mjs
-```
-
-```bash
-# 채팅 요청 → Molla CLI 승인 → 채팅에서 실행, CLI 작업 생성, 동의 철회
-node demo/molla-bridge.js
-```
+- 이 저장소의 Molla CLI는 **v0.2부터 HTTP를 쓰지 않는 독립 런타임**(로컬 SQLite)이라 FA 엔진에 붙지 않아요. 이 호환 API는 v0.1 클라이언트용으로만 남겨 뒀어요.
+- 권한은 같은 `policy.js`를 거쳐요. 동의를 철회하면 다른 가족의 요청은 403이고, 송금은 2-of-3 가족 승인이 필요해요.
+- 카톡 채팅에서 생긴 승인 요청은 Molla 작업(`source: "chat"`)으로도 보이고, 승인된 작업은 `prepared` + `evidence.kind: "local_draft"`로 끝나요.
 
 ## 가족 메모리 (GBrain)
 
@@ -216,10 +194,9 @@ src/agent.js    Claude 도구 사용 루프 + 데모 모드
 src/vm.js       계정 주인별 모의 VM (예시 데이터)
 src/vault.js    계정 주인별 자격 증명 금고 (값은 밖으로 나오지 않음)
 src/memory.js   GBrain용 가족 메모리
-src/molla.js    Molla 호환 도메인: 세션, 작업, 기억, 연락처, 동의, 온톨로지
+src/molla.js    Molla v0.1 HTTP 호환 도메인: 세션, 작업, 기억, 연락처, 동의, 온톨로지
 src/server.js   HTTP + SSE (FA 라우트 + Molla 라우트)
 client/         UI용 브라우저 클라이언트(fa-client.js)와 React 훅(useFaRoom.js)
-molla-shim/     Molla 통합 테스트용 서버 진입점
 ```
 
 구독, 금액, 주소는 모두 예시 데이터예요.

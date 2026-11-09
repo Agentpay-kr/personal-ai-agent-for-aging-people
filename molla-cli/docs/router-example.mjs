@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
-/** Host supplies cliPath, baseUrl and sessionFile; never take them from model output. */
-export function invokeMolla({cliPath,baseUrl,sessionFile,request}){
+/** Host supplies cliPath, databaseFile and sessionFile; never take them from model output. */
+export function invokeMolla({cliPath,databaseFile,sessionFile,request}){
  return new Promise((resolve,reject)=>{
-  const child=spawn(process.execPath,[cliPath,'route','--input','-','--base-url',baseUrl,'--session',sessionFile],{stdio:['pipe','pipe','pipe'],windowsHide:true});
+  const child=spawn(process.execPath,[cliPath,'route','--input','-','--db',databaseFile,'--session',sessionFile],{stdio:['pipe','pipe','pipe'],windowsHide:true});
   let stdout='',stderr='';
   child.stdout.on('data',b=>{stdout+=b;if(stdout.length>2_000_000){child.kill();reject(new Error('Molla output exceeded limit'));}});
   child.stderr.on('data',b=>{stderr=(stderr+b).slice(-8000);});
