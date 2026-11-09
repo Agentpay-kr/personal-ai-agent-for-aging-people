@@ -70,6 +70,33 @@ test('an impostor phone cannot approve, and a proof cannot be replayed', async (
   assert.equal(trust.verifyProof('mom', proof, ctx), false);
 });
 
+test('beneficiary exclusion: dad asking for mom\'s money to himself needs mom + son, dad never counts', async () => {
+  const { trust, mom, dad, son, clock } = setup();
+  await trust.linkAccount('mom', 'bank', 'bank-session');
+  const a = await trust.request(dad, { owner: 'mom', kind: 'transfer', service: 'bank', amountKRW: 500_000, payee: '아빠 계좌', payeeOwner: 'dad', summary: '엄마 → 아빠 50만원' });
+  assert.equal(a.status, 'pending');
+  assert.deepEqual(a.approvals, []);
+  assert.ok(a.decision.reasons.some((r) => r.includes('승인자로 셀 수 없어요')));
+
+  await trust.approveWith(dad, a.id);
+  assert.deepEqual(a.approvals, []);
+  await trust.approveWith(mom, a.id);
+  assert.equal(a.status, 'pending');
+  await trust.approveWith(son, a.id);
+  assert.equal(a.status, 'scheduled');
+  assert.deepEqual(a.approvals, ['mom', 'son']);
+
+  clock.t = a.executeAfter! + 1;
+  await trust.tick();
+  assert.equal(a.status, 'executed');
+});
+
+test('a transfer with too few eligible approvers is blocked', async () => {
+  const { trust, dad } = setup();
+  const a = await trust.request(dad, { owner: 'mom', kind: 'transfer', amountKRW: 500_000, payee: '아들 계좌', payeeOwner: 'son', summary: '엄마 → 아들 50만원' });
+  assert.equal(a.status, 'blocked');
+});
+
 test('impostor approval: hold + family alert + sealed evidence, a second attempt locks down', async () => {
   const { trust, mom, dad, events } = setup();
   await trust.linkAccount('mom', 'bank', 'bank-session');

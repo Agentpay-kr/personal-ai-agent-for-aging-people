@@ -88,10 +88,20 @@ export function createTrustGate() {
   const everyone = (room) => room.members.filter((id) => id !== 'fa');
   const firstLine = (lines) => (lines?.[0] ?? '').replace(/^[^\p{L}\d"“]+/u, '');
 
+  // Same rule as fa-trust: for transfers, the beneficiary and a non-owner requester can't approve.
+  function exclusion(r, id) {
+    if (r.kind !== 'transfer') return null;
+    if (r.payeeOwner && id === r.payeeOwner && id !== r.owner) return '돈을 받는 사람은 승인할 수 없어요.';
+    if (id === r.requester && id !== r.owner) return '요청한 사람은 승인자로 셀 수 없어요.';
+    return null;
+  }
+
   function pendingCard(room, a) {
     const { request: r, decision: d } = a;
     const owner = r.owner;
     const others = family(room).filter((id) => id !== owner && id !== r.requester);
+    const cosigners = family(room).filter((id) => id !== owner && !exclusion(r, id) && !a.approvals.includes(id));
+    const excluded = family(room).filter((id) => exclusion(r, id));
     return {
       text: d.reasons.join('\n'),
       card: {
@@ -106,9 +116,12 @@ export function createTrustGate() {
           row('위험 등급', `${d.tier} · 승인 ${d.approvalsRequired}명`),
           ...d.signals.map((s) => row('⚠️ 신호', s.label)),
           ...(d.coolingOffMinutes ? [row('실행 지연', `승인 후 ${d.coolingOffMinutes / 60}시간`)] : []),
+          ...(excluded.length ? [row('승인 불가', `${excluded.map((id) => LABEL[id]).join('·')} (요청자·받는 사람)`)] : []),
+          ...(a.approvals.length ? [row('승인 완료', a.approvals.map((id) => `${LABEL[id]} ✓`).join(', '))] : []),
         ],
         actions: [
-          button('trust_approve', `${LABEL[owner]} 승인하기`, { value: a.id, actor: owner }),
+          ...(a.approvals.includes(owner) ? [] : [button('trust_approve', `${LABEL[owner]} 승인하기`, { value: a.id, actor: owner })]),
+          ...(cosigners.length ? [button('trust_approve', `함께 승인 (${cosigners.map((id) => LABEL[id]).join('·')})`, { value: a.id, actors: cosigners })] : []),
           button('trust_reject', '거절하기', { value: a.id, actor: owner, variant: 'secondary' }),
           ...(others.length ? [button('trust_scam', '사기 신고', { value: a.id, actors: others, variant: 'secondary' })] : []),
         ],
@@ -247,10 +260,18 @@ export function createTrustGate() {
       const before = a.status;
       let next = a;
       switch (action) {
-        case 'trust_approve':
+        case 'trust_approve': {
+          const why = exclusion(a.request, actor);
+          if (why) return [note(room, `🚫 ${LABEL[actor]}: ${why}`)];
+          const count = a.approvals.length;
           next = await trust.approveWith(phones[actor], a.id);
-          if (next.status === before && next.status === 'pending') return [note(room, `${LABEL[actor]} 승인 ✓ · 승인이 더 필요해요.`)];
+          if (next.status === before && ['pending', 'held'].includes(next.status)) {
+            if (next.approvals.length === count) return [note(room, `이미 승인했거나 승인할 수 없는 요청이에요.`)];
+            const left = Math.max(0, next.decision.approvalsRequired - next.approvals.length);
+            return [{ ...view(room, next), text: `${LABEL[actor]} 승인 ✓ (기기 증명) · ${left}명 더 승인하면 진행돼요.` }];
+          }
           break;
+        }
         case 'trust_reject':
         case 'trust_cancel':
           next = await trust.rejectWith(phones[actor], a.id);

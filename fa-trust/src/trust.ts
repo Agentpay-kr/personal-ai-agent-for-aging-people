@@ -270,11 +270,33 @@ export class FamilyTrust {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
 
+    // Transfers: the beneficiary and a non-owner requester never count as approvers.
+    if (request.kind === 'transfer' && decision.outcome !== 'block') {
+      const eligible = this.#eligibleApprovers(request);
+      const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
+      if (eligible.length < decision.approvalsRequired) {
+        decision = {
+          ...decision,
+          outcome: 'block',
+          reasons: [...decision.reasons, '⛔ 받는 사람과 요청한 사람을 빼면 승인할 가족이 부족해서 실행할 수 없어요.'],
+        };
+      } else if (excluded.length) {
+        decision = {
+          ...decision,
+          reasons: [
+            ...decision.reasons,
+            `🚫 ${excluded.map((m) => this.name(m)).join('·')}은(는) 요청했거나 돈을 받는 사람이라 승인자로 셀 수 없어요. ` +
+              `${eligible.map((m) => this.name(m)).join('·')} 중 ${decision.approvalsRequired}명의 기기 승인이 필요해요.`,
+          ],
+        };
+      }
+    }
+
     const action: PendingAction = {
       id,
       request,
       decision,
-      approvals: verified ? [request.requester] : [],
+      approvals: verified && !this.#approverExclusion(request, request.requester) ? [request.requester] : [],
       status: decision.outcome === 'hold' ? 'held' : decision.outcome === 'block' ? 'blocked' : 'pending',
       createdAt: this.#now(),
     };
@@ -320,6 +342,12 @@ export class FamilyTrust {
     }
     if (a.status !== 'pending' && a.status !== 'held') {
       this.#emit('info', `이미 처리된 요청이에요 (${a.status}).`, requestId);
+      return a;
+    }
+    const excluded = this.#approverExclusion(a.request, memberId);
+    if (excluded) {
+      this.audit.append('approval_refused', memberId, excluded, { requestId });
+      this.#emit('info', `🚫 ${this.name(memberId)}: ${excluded}`, requestId);
       return a;
     }
     if (!a.approvals.includes(memberId)) a.approvals.push(memberId);
@@ -685,6 +713,20 @@ export class FamilyTrust {
     }
   }
 
+  /** Why `member` can't approve this request, or null if they can. */
+  #approverExclusion(req: ActionRequest, member: MemberId): string | null {
+    if (req.kind !== 'transfer') return null;
+    if (req.payeeOwner !== undefined && member === req.payeeOwner && member !== req.owner) {
+      return '돈을 받는 사람은 승인할 수 없어요.';
+    }
+    if (member === req.requester && member !== req.owner) return '요청한 사람은 승인자로 셀 수 없어요.';
+    return null;
+  }
+
+  #eligibleApprovers(req: ActionRequest): MemberId[] {
+    return [...this.#members.keys()].filter((m) => !this.#approverExclusion(req, m));
+  }
+
   // Someone tried to approve as a family member without that member's device.
   // 1st time: hold the request, demand one more family device, alert everyone, seal evidence.
   // 2nd time on the same request: emergency lockdown. (Not on the 1st, so forged
@@ -705,7 +747,7 @@ export class FamilyTrust {
     a.executeAfter = undefined;
     a.decision = {
       ...a.decision,
-      approvalsRequired: a.decision.approvalsRequired + 1,
+      approvalsRequired: Math.min(a.decision.approvalsRequired + 1, this.#eligibleApprovers(a.request).length),
       notifyFamily: true,
       reasons: [...a.decision.reasons, '🎭 사칭 승인 시도가 있어서 가족 1명의 기기 확인이 더 필요해요.'],
     };

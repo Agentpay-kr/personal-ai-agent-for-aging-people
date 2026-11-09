@@ -33,20 +33,25 @@ async function demo(t) {
 const cardOf = (reply) => reply.messages.find((m) => m.card)?.card;
 const buttonOf = (card, action) => card.actions.find((a) => a.action === action);
 
-test('dad moving mom\'s money waits for mom\'s device approval, then a 3-hour delay', { skip: !trustAvailable() }, async (t) => {
+test('dad moving mom\'s money needs mom + son (dad never counts), then a 3-hour delay', { skip: !trustAvailable() }, async (t) => {
   const { act, trust } = await demo(t);
   const asked = cardOf(await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘'));
   assert.equal(asked.kind, 'approval');
   assert.equal(asked.audience, 'mom');
-  const approve = buttonOf(asked, 'trust_approve');
-  assert.equal(approve.actor, 'mom');
+  const [momButton, cosign] = asked.actions.filter((a) => a.action === 'trust_approve');
+  assert.equal(momButton.actor, 'mom');
+  assert.deepEqual(cosign.actors, ['son']);
+  assert.ok(asked.rows.some((r) => r.label === '승인 불가' && r.detail.includes('아빠')));
 
-  // Dad pressing mom's button gets nowhere: the decision needs mom's own device.
-  const dadTry = await act('dad', 'trust_approve', approve.value);
-  assert.match(dadTry.messages[0].text, /이미 처리|승인이 더 필요/);
+  // Dad receives the money, so his approval is refused.
+  const dadTry = await act('dad', 'trust_approve', momButton.value);
+  assert.match(dadTry.messages[0].text, /돈을 받는 사람은 승인할 수 없어요/);
 
-  const scheduled = cardOf(await act('mom', 'trust_approve', approve.value));
+  const afterMom = await act('mom', 'trust_approve', momButton.value);
+  assert.match(afterMom.messages[0].text, /1명 더/);
+  const scheduled = cardOf(await act('son', 'trust_approve', momButton.value));
   assert.match(scheduled.title, /실행 예약/);
+  assert.ok(scheduled.rows.some((r) => r.detail.includes('엄마') && r.detail.includes('아들')));
   const done = cardOf(await act('son', 'trust_skip', buttonOf(scheduled, 'trust_skip').value));
   assert.match(done.title, /실행 완료/);
 

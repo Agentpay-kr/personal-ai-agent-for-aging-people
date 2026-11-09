@@ -3447,11 +3447,30 @@ var FamilyTrust = class {
     } else {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
+    if (request.kind === "transfer" && decision.outcome !== "block") {
+      const eligible = this.#eligibleApprovers(request);
+      const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
+      if (eligible.length < decision.approvalsRequired) {
+        decision = {
+          ...decision,
+          outcome: "block",
+          reasons: [...decision.reasons, "\u26D4 \uBC1B\uB294 \uC0AC\uB78C\uACFC \uC694\uCCAD\uD55C \uC0AC\uB78C\uC744 \uBE7C\uBA74 \uC2B9\uC778\uD560 \uAC00\uC871\uC774 \uBD80\uC871\uD574\uC11C \uC2E4\uD589\uD560 \uC218 \uC5C6\uC5B4\uC694."]
+        };
+      } else if (excluded.length) {
+        decision = {
+          ...decision,
+          reasons: [
+            ...decision.reasons,
+            `\u{1F6AB} ${excluded.map((m) => this.name(m)).join("\xB7")}\uC740(\uB294) \uC694\uCCAD\uD588\uAC70\uB098 \uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC774\uB77C \uC2B9\uC778\uC790\uB85C \uC140 \uC218 \uC5C6\uC5B4\uC694. ${eligible.map((m) => this.name(m)).join("\xB7")} \uC911 ${decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uC2B9\uC778\uC774 \uD544\uC694\uD574\uC694.`
+          ]
+        };
+      }
+    }
     const action = {
       id,
       request,
       decision,
-      approvals: verified ? [request.requester] : [],
+      approvals: verified && !this.#approverExclusion(request, request.requester) ? [request.requester] : [],
       status: decision.outcome === "hold" ? "held" : decision.outcome === "block" ? "blocked" : "pending",
       createdAt: this.#now()
     };
@@ -3494,6 +3513,12 @@ var FamilyTrust = class {
     }
     if (a.status !== "pending" && a.status !== "held") {
       this.#emit("info", `\uC774\uBBF8 \uCC98\uB9AC\uB41C \uC694\uCCAD\uC774\uC5D0\uC694 (${a.status}).`, requestId);
+      return a;
+    }
+    const excluded = this.#approverExclusion(a.request, memberId);
+    if (excluded) {
+      this.audit.append("approval_refused", memberId, excluded, { requestId });
+      this.#emit("info", `\u{1F6AB} ${this.name(memberId)}: ${excluded}`, requestId);
       return a;
     }
     if (!a.approvals.includes(memberId)) a.approvals.push(memberId);
@@ -3813,6 +3838,18 @@ var FamilyTrust = class {
       key.fill(0);
     }
   }
+  /** Why `member` can't approve this request, or null if they can. */
+  #approverExclusion(req, member) {
+    if (req.kind !== "transfer") return null;
+    if (req.payeeOwner !== void 0 && member === req.payeeOwner && member !== req.owner) {
+      return "\uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC740 \uC2B9\uC778\uD560 \uC218 \uC5C6\uC5B4\uC694.";
+    }
+    if (member === req.requester && member !== req.owner) return "\uC694\uCCAD\uD55C \uC0AC\uB78C\uC740 \uC2B9\uC778\uC790\uB85C \uC140 \uC218 \uC5C6\uC5B4\uC694.";
+    return null;
+  }
+  #eligibleApprovers(req) {
+    return [...this.#members.keys()].filter((m) => !this.#approverExclusion(req, m));
+  }
   // Someone tried to approve as a family member without that member's device.
   // 1st time: hold the request, demand one more family device, alert everyone, seal evidence.
   // 2nd time on the same request: emergency lockdown. (Not on the 1st, so forged
@@ -3831,7 +3868,7 @@ var FamilyTrust = class {
     a.executeAfter = void 0;
     a.decision = {
       ...a.decision,
-      approvalsRequired: a.decision.approvalsRequired + 1,
+      approvalsRequired: Math.min(a.decision.approvalsRequired + 1, this.#eligibleApprovers(a.request).length),
       notifyFamily: true,
       reasons: [...a.decision.reasons, "\u{1F3AD} \uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4\uAC00 \uC788\uC5B4\uC11C \uAC00\uC871 1\uBA85\uC758 \uAE30\uAE30 \uD655\uC778\uC774 \uB354 \uD544\uC694\uD574\uC694."]
     };
