@@ -35,7 +35,7 @@ const buttonOf = (card, action) => card.actions.find((a) => a.action === action)
 
 test('dad moving mom\'s money needs mom + son (dad never counts), then a 3-hour delay', { skip: !trustAvailable() }, async (t) => {
   const { act, trust } = await demo(t);
-  const asked = cardOf(await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘'));
+  const asked = cardOf(await act('dad', 'chat', '@치즈 엄마의 계좌에서 50만원만 내 계좌로 옮겨줘'));
   assert.equal(asked.kind, 'approval');
   // No card-wide audience, or the app disables son's co-sign button.
   assert.equal(asked.audience, undefined);

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { stripFaMention } from './public/mentions.mjs';
 import { createDemoVmAgent, DEMO_SUBSCRIPTIONS, DEMO_VM_BINDINGS } from './vm-agent.mjs';
 import { createTrustGate, isMoneyRequest, TRUST_ACTIONS } from './trust-gate.mjs';
 // The FA engine's family permission engine decides who may do what (fa-engine/src/policy.js).
@@ -70,7 +71,7 @@ function parseTransfer(query, actor) {
 }
 
 function intent(text, actor) {
-  const query = text.trim().replace(/^@FA\s*/i, '');
+  const query = stripFaMention(text);
   if (/송금|이체|계좌.*(?:옮겨|보내)/.test(query)) return { action: 'transfer', transfer: parseTransfer(query, actor) };
   if (/^(?:해지 )?승인\s*(?:해요|할게요?|합니다|하겠습니다)[.!。！]?$/.test(query)) return { action: 'approve' };
   if (/^(?:구독 (?:목록 보기|읽기)를? )?허용\s*(?:해요|할게요?|합니다|하겠습니다)[.!。！]?$/.test(query)) return { action: 'scope' };
@@ -157,7 +158,7 @@ function readers(owner, grant) {
 }
 
 function welcome(room) {
-  return reply(room, '안녕하세요, 가족의 일을 함께 도와드리는 FA예요.', {
+  return reply(room, '안녕하세요, 우리 가족 AI 도우미 치즈예요. 치즈~ 같이 해볼까요?', {
     kind: 'welcome',
     title: '누구의 일을 도와드릴까요?',
     description: '“엄마 구독 좀 정리해줘”처럼 누구의 구독인지 알려 주세요.',
