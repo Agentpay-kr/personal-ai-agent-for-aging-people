@@ -1,5 +1,6 @@
 export * from './policy';
 export * from './trust';
+export * from './judge';
 export { ACTION_KINDS, PROPOSE_ACTION_TOOL, toActionRequest } from './tool';
 export { MemberDevice, generateKeyPair, prove, verify, type ZkProof } from './zk';
 export { combine, split, type Share } from './shamir';

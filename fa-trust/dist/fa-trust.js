@@ -1119,6 +1119,203 @@ var FamilyKeyTree = class {
   }
 };
 
+// src/judge.ts
+var JudgeUnavailableError = class extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = "JudgeUnavailableError";
+  }
+};
+var SIDE_EFFECT_KINDS = /* @__PURE__ */ new Set(["order", "cancel_subscription", "transfer"]);
+var READ_INTENTS = /* @__PURE__ */ new Set(["read", "scan", "list", "chat", "welcome", "query", "question"]);
+var LABEL = { pass: "\uD1B5\uACFC", hold: "\uBCF4\uB958", block: "\uCC28\uB2E8" };
+var duration2 = (min) => min % 60 === 0 ? `${min / 60}\uC2DC\uAC04` : `${min}\uBD84`;
+var clamp01 = (x) => Number.isFinite(x) ? Math.min(1, Math.max(0, x)) : 1;
+function failClosedVerdict(kind, error) {
+  const why = error instanceof Error ? error.message : String(error);
+  return SIDE_EFFECT_KINDS.has(kind) ? {
+    verdict: "hold",
+    risk: 1,
+    reasons: ["AI \uC2EC\uD310\uC758 \uD310\uC815\uC744 \uBC1B\uC9C0 \uBABB\uD574\uC11C \uC548\uC804\uD558\uAC8C \uBCF4\uB958\uD588\uC5B4\uC694."],
+    signals: ["judge_unavailable"],
+    model: `fail-closed (${why})`
+  } : {
+    verdict: "pass",
+    risk: 0.5,
+    reasons: ["AI \uC2EC\uD310\uC758 \uD310\uC815\uC744 \uBC1B\uC9C0 \uBABB\uD588\uC9C0\uB9CC \uC870\uD68C\uB77C\uC11C \uADDC\uCE59\uB300\uB85C \uC9C4\uD589\uD574\uC694."],
+    signals: ["judge_unavailable"],
+    model: `fail-open-read (${why})`
+  };
+}
+function combineWithJudge(rules, judge, opts = {}) {
+  const holdMinutes = opts.holdCoolingOffMinutes ?? DEFAULT_POLICY.holdCoolingOffMinutes;
+  const payeeMinutes = opts.newPayeeCoolingOffMinutes ?? DEFAULT_POLICY.newPayeeCoolingOffMinutes;
+  const tag = `\u{1F9D1}\u200D\u2696\uFE0F AI \uC2EC\uD310: ${LABEL[judge.verdict]} \xB7 \uC704\uD5D8\uB3C4 ${Math.round(clamp01(judge.risk) * 100)}%`;
+  const why = judge.reasons.slice(0, 3).map((r) => `\u2022 ${r}`);
+  if (rules.outcome === "block") {
+    return { decision: { ...rules, reasons: [...rules.reasons, tag, ...why] }, effect: "kept" };
+  }
+  if (judge.verdict === "block") {
+    return {
+      decision: {
+        ...rules,
+        outcome: "block",
+        reasons: [tag, "\u26D4 \uC2E4\uD589\uD558\uC9C0 \uC54A\uACE0 \uB9C9\uC558\uC5B4\uC694.", ...why, "\uAC00\uC871 \uBAA8\uB450\uC5D0\uAC8C \uC54C\uB9AC\uACE0 \uAE30\uB85D\uC744 \uBD09\uC778\uD588\uC5B4\uC694."],
+        notifyFamily: true,
+        sealEvidence: true
+      },
+      effect: "raised"
+    };
+  }
+  if (judge.verdict === "hold") {
+    if (rules.outcome === "hold") {
+      return { decision: { ...rules, reasons: [...rules.reasons, tag, ...why] }, effect: "kept" };
+    }
+    return {
+      decision: {
+        ...rules,
+        tier: rules.tier === "T0" || rules.tier === "T1" ? "T2" : rules.tier,
+        outcome: "hold",
+        ownerApprovalRequired: true,
+        approvalsRequired: Math.max(2, rules.approvalsRequired),
+        coolingOffMinutes: Math.max(rules.coolingOffMinutes, holdMinutes),
+        reasons: [
+          tag,
+          "\u{1F6A8} AI \uC2EC\uD310\uC774 \uC704\uD5D8\uD558\uB2E4\uACE0 \uBD10\uC11C \uBCF4\uB958\uD588\uC5B4\uC694.",
+          ...why,
+          `\uAC00\uC871 \uD55C \uBA85\uC774 \uC9C1\uC811 \uD655\uC778\uD558\uACE0 ${duration2(Math.max(rules.coolingOffMinutes, holdMinutes))}\uC774 \uC9C0\uB098\uC57C\uB9CC \uC9C4\uD589\uB3FC\uC694.`
+        ],
+        notifyFamily: true,
+        sealEvidence: true
+      },
+      effect: "raised"
+    };
+  }
+  if (rules.outcome === "hold") {
+    const hardSignal = rules.signals.some((s) => s.severity === "high");
+    if (hardSignal) {
+      return {
+        decision: {
+          ...rules,
+          reasons: [...rules.reasons, tag, "\uACE0\uC704\uD5D8 \uC2E0\uD638\uB77C\uC11C AI \uC2EC\uD310 \uC758\uACAC\uACFC \uC0C1\uAD00\uC5C6\uC774 \uAC00\uC871 \uD655\uC778\uC774 \uD544\uC694\uD574\uC694.", ...why]
+        },
+        effect: "kept"
+      };
+    }
+    const newPayee = rules.signals.some((s) => s.id === "new_payee");
+    const coolingOffMinutes = newPayee ? payeeMinutes : 0;
+    return {
+      decision: {
+        ...rules,
+        outcome: "needs_approval",
+        ownerApprovalRequired: true,
+        approvalsRequired: Math.max(2, rules.approvalsRequired),
+        coolingOffMinutes,
+        reasons: [
+          tag,
+          "\u2705 \uADDC\uCE59\uC740 \uC758\uC2EC\uD588\uC9C0\uB9CC AI \uC2EC\uD310\uC740 \uC815\uC0C1 \uAC70\uB798\uB85C \uBD24\uC5B4\uC694. \uADF8\uB798\uB3C4 \uBCF8\uC778 + \uAC00\uC871 1\uBA85 \uC2B9\uC778\uC740 \uD544\uC694\uD574\uC694.",
+          ...why,
+          ...coolingOffMinutes > 0 ? [`\u23F3 \uCC98\uC74C \uBCF4\uB0B4\uB294 \uACC4\uC88C\uB77C \uC2B9\uC778 \uD6C4 ${duration2(coolingOffMinutes)} \uB4A4\uC5D0 \uC2E4\uD589\uB3FC\uC694.`] : []
+        ],
+        notifyFamily: true,
+        sealEvidence: false
+      },
+      effect: "cleared"
+    };
+  }
+  return { decision: { ...rules, reasons: [...rules.reasons, tag] }, effect: "annotated" };
+}
+function withFallback(primary, fallback, onError) {
+  return async (input) => {
+    try {
+      return await primary(input);
+    } catch (error) {
+      onError?.(error);
+      const v = await fallback(input);
+      return { ...v, model: `${v.model} (1\uCC28 \uC2EC\uD310 \uC2E4\uD328\uB85C \uB300\uCCB4)` };
+    }
+  };
+}
+var COERCION = /검찰|검사(님|실|입니다|라고)|수사관|경찰|금감원|금융감독원|수사\s*중|사건\s*번호/;
+var SAFE_ACCOUNT = /안전\s*계좌|보호\s*계좌|국가\s*(안전|보호)\s*계좌/;
+var ISOLATION = /(가족|자녀|아들|딸)(에게|한테|들한테)?\s*(말|알리|얘기)(하)?지\s*(마|말)|비밀로|(아무|누구)(에게|한테)?도\s*(말|알리|얘기)/;
+var ROUTINE_BILL = /관리비|월세|공과금|전기\s*요금|가스\s*요금|수도\s*요금|병원비|보험료|학원비/;
+var MANIPULATION = /이전\s*(지시|명령).*무시|규칙.*무시|ignore (all|previous|your)|AI\s*(비서|어시스턴트)(는|가)?\s*(즉시|바로)/i;
+var heuristicJudge = async (input) => {
+  const { request: req, rules, metadata: m, rawData, log } = input;
+  const sideEffect = SIDE_EFFECT_KINDS.has(req.kind);
+  const text = [req.text ?? "", ...req.context ?? [], ...rawData].join("\n");
+  const blocks = [];
+  const holds = [];
+  const signals = [];
+  const flag = (bucket, signal, reason) => {
+    bucket.push(reason);
+    signals.push(signal);
+  };
+  if (m.actor && m.actor !== req.requester) {
+    flag(blocks, "actor_mismatch", "\uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0B8 \uC0AC\uB78C\uACFC \uC2E4\uD589\uC744 \uC694\uCCAD\uD55C \uC0AC\uB78C\uC774 \uB2EC\uB77C\uC694.");
+  }
+  if (m.owner && m.owner !== req.owner) {
+    flag(blocks, "owner_mismatch", "\uB77C\uC6B0\uD130\uAC00 \uC815\uD55C \uACC4\uC815 \uC8FC\uC778\uACFC \uC2E4\uC81C \uC2E4\uD589 \uB300\uC0C1\uC774 \uB2EC\uB77C\uC694.");
+  }
+  if (sideEffect && m.intent && READ_INTENTS.has(m.intent)) {
+    flag(blocks, "intent_mismatch", `\uB77C\uC6B0\uD130\uB294 "${m.intent}"(\uC870\uD68C\xB7\uB300\uD654)\uB85C \uBD84\uB958\uD588\uB294\uB370 \uC2E4\uC81C\uB85C\uB294 \uB3C8\uC774\uB098 \uACC4\uC815\uC744 \uBC14\uAFB8\uB824 \uD574\uC694.`);
+  }
+  if (MANIPULATION.test(text)) {
+    flag(blocks, "prompt_injection", "\uBA54\uC2DC\uC9C0 \uC548\uC5D0 AI\uC5D0\uAC8C \uADDC\uCE59\uC744 \uBB34\uC2DC\uD558\uB77C\uB294 \uBB38\uC7A5\uC774 \uC788\uC5B4\uC694.");
+  }
+  if (sideEffect && COERCION.test(text) && SAFE_ACCOUNT.test(text) && (ISOLATION.test(text) || m.callActive || m.channel === "call")) {
+    flag(blocks, "coercion_script", "\uAE30\uAD00 \uC0AC\uCE6D + \uC548\uC804\uACC4\uC88C + \uBE44\uBC00 \uC720\uC9C0(\uB610\uB294 \uD1B5\uD654 \uC911) \uC870\uD569\uC740 \uC804\uD615\uC801\uC778 \uBCF4\uC774\uC2A4\uD53C\uC2F1 \uB300\uBCF8\uC774\uC5D0\uC694.");
+  }
+  if (req.kind === "transfer" && (m.callActive || m.channel === "call")) {
+    flag(holds, "transfer_during_call", "\uD1B5\uD654 \uC911\uC5D0 \uB4E4\uC5B4\uC628 \uC1A1\uAE08 \uC694\uCCAD\uC774\uC5D0\uC694. \uC0AC\uAE30\uBC94\uC740 \uC804\uD654\uB97C \uB04A\uC9C0 \uBABB\uD558\uAC8C \uD55C \uCC44 \uC774\uCCB4\uB97C \uC2DC\uCF1C\uC694.");
+  }
+  if (sideEffect && typeof m.confidence === "number" && m.confidence < 0.5) {
+    flag(holds, "low_router_confidence", "\uB77C\uC6B0\uD130\uAC00 \uB204\uAD6C\uC758 \uC77C\uC778\uC9C0 \uD655\uC2E0\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694.");
+  }
+  if (req.requester !== req.owner && m.deviceVerified === false) {
+    flag(holds, "unverified_device", "\uB4F1\uB85D\uB41C \uAE30\uAE30\uC5D0\uC11C \uC628 \uC694\uCCAD\uC774 \uC544\uB2C8\uC5D0\uC694.");
+  }
+  const newest = log.reduce((max, e) => Math.max(max, e.ts), Number.NEGATIVE_INFINITY);
+  const recent = log.filter((e) => e.ts >= newest - 24 * 60 * 60 * 1e3);
+  if (recent.some((e) => e.type === "proof_failed")) {
+    flag(holds, "recent_impostor", "\uCD5C\uADFC \uB4F1\uB85D\uB418\uC9C0 \uC54A\uC740 \uAE30\uAE30\uAC00 \uC2B9\uC778\uC744 \uC2DC\uB3C4\uD55C \uAE30\uB85D\uC774 \uC788\uC5B4\uC694.");
+  }
+  if (sideEffect && recent.some((e) => e.type === "lockdown")) {
+    flag(holds, "recent_lockdown", "\uCD5C\uADFC \uAE34\uAE09 \uC7A0\uAE08\uC774 \uC788\uC5C8\uC5B4\uC694.");
+  }
+  const transfers = recent.filter((e) => e.type === "request" && /송금|이체|transfer/.test(e.summary)).length;
+  if (req.kind === "transfer" && transfers >= 3) {
+    flag(holds, "repeated_transfers", "\uC9E7\uC740 \uC2DC\uAC04\uC5D0 \uC1A1\uAE08 \uC694\uCCAD\uC774 \uBC18\uBCF5\uB410\uC5B4\uC694.");
+  }
+  if (blocks.length > 0) {
+    return { verdict: "block", risk: 0.95, reasons: [...blocks, ...holds].slice(0, 3), signals, model: "heuristic-v1" };
+  }
+  if (holds.length > 0) {
+    return { verdict: "hold", risk: 0.8, reasons: holds.slice(0, 3), signals, model: "heuristic-v1" };
+  }
+  if (rules.outcome === "hold") {
+    const soft = !rules.signals.some((s) => s.severity === "high");
+    if (soft && ROUTINE_BILL.test(text)) {
+      return {
+        verdict: "pass",
+        risk: 0.25,
+        reasons: ["\uAD00\uB9AC\uBE44\xB7\uACF5\uACFC\uAE08 \uAC19\uC740 \uC815\uAE30 \uC0DD\uD65C\uBE44\uB85C \uBCF4\uC774\uACE0, \uC0AC\uAE30 \uB300\uBCF8\uC758 \uD2B9\uC9D5\uC740 \uC5C6\uC5B4\uC694."],
+        signals: ["routine_bill"],
+        model: "heuristic-v1"
+      };
+    }
+    return { verdict: "hold", risk: 0.6, reasons: ["\uADDC\uCE59\uC774 \uC758\uC2EC\uD55C \uC2E0\uD638\uB97C \uB4A4\uC9D1\uC744 \uADFC\uAC70\uAC00 \uC5C6\uC5B4\uC694."], signals: ["rules_hold"], model: "heuristic-v1" };
+  }
+  return {
+    verdict: "pass",
+    risk: rules.outcome === "allow" ? 0.05 : 0.15,
+    reasons: ["\uBA54\uD0C0\uB370\uC774\uD130\xB7\uC6D0\uBB38\xB7\uAE30\uB85D\uC5D0\uC11C \uC774\uC0C1\uD55C \uC810\uC744 \uCC3E\uC9C0 \uBABB\uD588\uC5B4\uC694."],
+    signals: [],
+    model: "heuristic-v1"
+  };
+};
+
 // src/vault.ts
 var ShreddedError = class extends Error {
   recordId;
@@ -3310,7 +3507,7 @@ var DAY_MS = 24 * 60 * 60 * 1e3;
 var slotOf = (owner, service) => `session:${owner}:${service}`;
 var evidenceSlot = (id) => `evidence:${id}`;
 var OPEN = ["pending", "held", "scheduled"];
-var duration2 = (min) => min % 60 === 0 ? `${min / 60}\uC2DC\uAC04` : `${min}\uBD84`;
+var duration3 = (min) => min % 60 === 0 ? `${min / 60}\uC2DC\uAC04` : `${min}\uBD84`;
 function blocked(reason, sealIt) {
   return {
     tier: "T3",
@@ -3332,6 +3529,8 @@ var FamilyTrust = class {
   #now;
   #policy;
   #executor;
+  #judge;
+  #judgeTimeoutMs;
   #members = /* @__PURE__ */ new Map();
   #publicKeys = /* @__PURE__ */ new Map();
   #devices = /* @__PURE__ */ new Map();
@@ -3350,6 +3549,8 @@ var FamilyTrust = class {
     this.#now = opts.now ?? Date.now;
     this.#policy = { ...DEFAULT_POLICY, ...opts.policy };
     this.#executor = opts.executor ?? ((req) => `${req.summary ?? req.kind} \uC644\uB8CC`);
+    this.#judge = opts.judge;
+    this.#judgeTimeoutMs = opts.judgeTimeoutMs ?? 12e3;
     this.vault = new ShredVault(this.#now);
     this.audit = new AuditLog(this.#now);
     for (const m of opts.members) this.#members.set(m.id, m);
@@ -3425,13 +3626,17 @@ var FamilyTrust = class {
     return shortId("req");
   }
   /** A member's phone signs and submits a request in one step (convenience for the single-process demo). */
-  async request(device, req) {
+  async request(device, req, context = {}) {
     const id = this.newRequestId();
     const proof = device.prove(this.context(device.memberId, "request", id));
     const share = req.service ? device.shareFor(slotOf(req.owner, req.service)) : void 0;
-    return this.submit({ ...req, id, requester: device.memberId }, { proof, share });
+    return this.submit({ ...req, id, requester: device.memberId }, { proof, share }, context);
   }
-  async submit(req, auth = {}) {
+  /**
+   * `context` is what the router AI knows: its metadata, the raw messages, its own log lines.
+   * When a judge is configured it reads all of that (plus this audit log) before anything runs.
+   */
+  async submit(req, auth = {}, context = {}) {
     const id = req.id ?? this.newRequestId();
     if (this.#actions.has(id)) throw new Error(`duplicate request id ${id}`);
     const request = { ...req, id };
@@ -3445,13 +3650,30 @@ var FamilyTrust = class {
     } else {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
+    let judged;
+    if (this.#judge && decision.outcome !== "block") {
+      const verdict = await this.#runJudge({
+        request,
+        rules: decision,
+        metadata: { ...context.metadata, deviceVerified: verified },
+        rawData: context.rawData ?? [],
+        log: [...this.#recentLog(), ...context.log ?? []]
+      });
+      const combined = combineWithJudge(decision, verdict, {
+        holdCoolingOffMinutes: this.#policy.holdCoolingOffMinutes,
+        newPayeeCoolingOffMinutes: this.#policy.newPayeeCoolingOffMinutes
+      });
+      decision = combined.decision;
+      judged = { ...verdict, effect: combined.effect };
+    }
     const action = {
       id,
       request,
       decision,
       approvals: verified ? [request.requester] : [],
       status: decision.outcome === "hold" ? "held" : decision.outcome === "block" ? "blocked" : "pending",
-      createdAt: this.#now()
+      createdAt: this.#now(),
+      judge: judged
     };
     this.#actions.set(id, action);
     if (verified && auth.share) this.#shares.set(id, [auth.share]);
@@ -3461,6 +3683,13 @@ var FamilyTrust = class {
       verified,
       signals: decision.signals.map((s) => s.id)
     });
+    if (judged) {
+      this.audit.append("judge", "ai_judge", `${judged.verdict} (${Math.round(judged.risk * 100)}%) \u2192 ${judged.effect}`, {
+        requestId: id,
+        model: judged.model,
+        signals: judged.signals
+      });
+    }
     this.#emit("decision", decision.reasons.join("\n"), id);
     if (decision.notifyFamily) {
       const state = decision.outcome === "hold" ? "\uC0AC\uAE30 \uC758\uC2EC\uC73C\uB85C \uBCF4\uB958" : decision.outcome === "block" ? "\uCC28\uB2E8" : "\uAC00\uC871 \uD655\uC778 \uD544\uC694";
@@ -3758,7 +3987,7 @@ var FamilyTrust = class {
       this.audit.append("scheduled", "fa_agent", "\uC9C0\uC5F0 \uC2E4\uD589 \uC608\uC57D", { requestId: a.id, executeAfter: a.executeAfter });
       this.#emit(
         "scheduled",
-        `\u23F3 \uC2B9\uC778\uC774 \uBAA8\uC600\uC5B4\uC694. ${duration2(d.coolingOffMinutes)} \uB4A4\uC5D0 \uC2E4\uD589\uB418\uACE0, \uADF8 \uC804\uC5D4 \uB204\uAD6C\uB4E0 \uCDE8\uC18C\uD560 \uC218 \uC788\uC5B4\uC694.`,
+        `\u23F3 \uC2B9\uC778\uC774 \uBAA8\uC600\uC5B4\uC694. ${duration3(d.coolingOffMinutes)} \uB4A4\uC5D0 \uC2E4\uD589\uB418\uACE0, \uADF8 \uC804\uC5D4 \uB204\uAD6C\uB4E0 \uCDE8\uC18C\uD560 \uC218 \uC788\uC5B4\uC694.`,
         a.id
       );
       return;
@@ -3858,6 +4087,30 @@ var FamilyTrust = class {
   #requireMember(id) {
     if (!this.#members.has(id)) throw new Error(`unknown member ${id}`);
   }
+  /** Runs the judge with a timeout. Errors, timeouts and malformed verdicts fail closed. */
+  async #runJudge(input) {
+    const judge = this.#judge;
+    if (!judge) return failClosedVerdict(input.request.kind, new Error("no judge configured"));
+    let timer;
+    try {
+      const v = await Promise.race([
+        judge(input),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`judge timed out after ${this.#judgeTimeoutMs}ms`)), this.#judgeTimeoutMs);
+        })
+      ]);
+      const valid = (v.verdict === "pass" || v.verdict === "hold" || v.verdict === "block") && typeof v.risk === "number" && Array.isArray(v.reasons) && Array.isArray(v.signals);
+      if (!valid) throw new Error("judge returned a malformed verdict");
+      return { ...v, risk: clamp01(v.risk), model: typeof v.model === "string" ? v.model : "unknown" };
+    } catch (error) {
+      return failClosedVerdict(input.request.kind, error);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  #recentLog(limit = 20) {
+    return this.audit.entries().slice(-limit).map(({ ts, type, actor, summary }) => ({ ts, type, actor, summary }));
+  }
   #get(requestId) {
     const a = this.#actions.get(requestId);
     if (!a) throw new Error(`unknown request ${requestId}`);
@@ -3940,19 +4193,25 @@ export {
   FORBIDDEN_ACTIONS,
   FamilyKeyTree,
   FamilyTrust,
+  JudgeUnavailableError,
   MemberDevice,
   PROPOSE_ACTION_TOOL,
   SCAM_PATTERNS,
+  SIDE_EFFECT_KINDS,
   ShredVault,
   ShreddedError,
+  clamp01,
   codeString,
   combine,
+  combineWithJudge,
   decrypt,
   decryptText,
   detectSignals,
   encrypt,
   evaluate,
+  failClosedVerdict,
   generateKeyPair,
+  heuristicJudge,
   newKey,
   f as oneWay,
   openEvidence,
@@ -3960,7 +4219,8 @@ export {
   sealEvidence,
   split,
   toActionRequest,
-  verify
+  verify,
+  withFallback
 };
 /*! Bundled license information:
 

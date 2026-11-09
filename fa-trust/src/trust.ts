@@ -17,6 +17,17 @@ import { josa, serviceLabel } from './korean';
 import { openEvidence, sealEvidence, type SealedEvidence } from './evidence';
 import { FamilyKeyTree } from './gkm';
 import {
+  clamp01,
+  combineWithJudge,
+  failClosedVerdict,
+  type Judge,
+  type JudgeEffect,
+  type JudgeInput,
+  type JudgeLogEntry,
+  type JudgeVerdict,
+  type RouterContext,
+} from './judge';
+import {
   DEFAULT_POLICY,
   evaluate,
   type ActionRequest,
@@ -56,6 +67,8 @@ export interface PendingAction {
   evidenceId?: string;
   result?: string;
   receipt?: string;
+  /** The AI judge's verdict and how it changed the rule decision. */
+  judge?: JudgeVerdict & { effect: JudgeEffect };
 }
 
 export interface TrustEvent {
@@ -97,6 +110,10 @@ export interface FamilyTrustOptions {
   policy?: Partial<PolicyConfig>;
   now?: () => number;
   executor?: Executor;
+  /** Optional AI judge between the router and execution (see judge.ts). */
+  judge?: Judge;
+  /** Judge timeout in ms. On timeout or error, anything with side effects is held (fail closed). Default 12000. */
+  judgeTimeoutMs?: number;
 }
 
 export const FA_SERVER = 'fa_server';
@@ -130,6 +147,8 @@ export class FamilyTrust {
   readonly #now: () => number;
   readonly #policy: PolicyConfig;
   readonly #executor: Executor;
+  readonly #judge: Judge | undefined;
+  readonly #judgeTimeoutMs: number;
   readonly #members = new Map<MemberId, MemberProfile>();
   readonly #publicKeys = new Map<MemberId, string>();
   readonly #devices = new Map<MemberId, MemberDevice>();
@@ -149,6 +168,8 @@ export class FamilyTrust {
     this.#now = opts.now ?? Date.now;
     this.#policy = { ...DEFAULT_POLICY, ...opts.policy };
     this.#executor = opts.executor ?? ((req) => `${req.summary ?? req.kind} 완료`);
+    this.#judge = opts.judge;
+    this.#judgeTimeoutMs = opts.judgeTimeoutMs ?? 12_000;
     this.vault = new ShredVault(this.#now);
     this.audit = new AuditLog(this.#now);
     for (const m of opts.members) this.#members.set(m.id, m);
@@ -242,14 +263,26 @@ export class FamilyTrust {
   }
 
   /** A member's phone signs and submits a request in one step (convenience for the single-process demo). */
-  async request(device: MemberDevice, req: Omit<ActionRequest, 'requester' | 'id'>): Promise<PendingAction> {
+  async request(
+    device: MemberDevice,
+    req: Omit<ActionRequest, 'requester' | 'id'>,
+    context: RouterContext = {},
+  ): Promise<PendingAction> {
     const id = this.newRequestId();
     const proof = device.prove(this.context(device.memberId, 'request', id));
     const share = req.service ? device.shareFor(slotOf(req.owner, req.service)) : undefined;
-    return this.submit({ ...req, id, requester: device.memberId }, { proof, share });
+    return this.submit({ ...req, id, requester: device.memberId }, { proof, share }, context);
   }
 
-  async submit(req: ActionRequest, auth: { proof?: ZkProof; share?: Share } = {}): Promise<PendingAction> {
+  /**
+   * `context` is what the router AI knows: its metadata, the raw messages, its own log lines.
+   * When a judge is configured it reads all of that (plus this audit log) before anything runs.
+   */
+  async submit(
+    req: ActionRequest,
+    auth: { proof?: ZkProof; share?: Share } = {},
+    context: RouterContext = {},
+  ): Promise<PendingAction> {
     const id = req.id ?? this.newRequestId();
     if (this.#actions.has(id)) throw new Error(`duplicate request id ${id}`);
     const request: ActionRequest = { ...req, id };
@@ -268,6 +301,23 @@ export class FamilyTrust {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
 
+    let judged: (JudgeVerdict & { effect: JudgeEffect }) | undefined;
+    if (this.#judge && decision.outcome !== 'block') {
+      const verdict = await this.#runJudge({
+        request,
+        rules: decision,
+        metadata: { ...context.metadata, deviceVerified: verified },
+        rawData: context.rawData ?? [],
+        log: [...this.#recentLog(), ...(context.log ?? [])],
+      });
+      const combined = combineWithJudge(decision, verdict, {
+        holdCoolingOffMinutes: this.#policy.holdCoolingOffMinutes,
+        newPayeeCoolingOffMinutes: this.#policy.newPayeeCoolingOffMinutes,
+      });
+      decision = combined.decision;
+      judged = { ...verdict, effect: combined.effect };
+    }
+
     const action: PendingAction = {
       id,
       request,
@@ -275,6 +325,7 @@ export class FamilyTrust {
       approvals: verified ? [request.requester] : [],
       status: decision.outcome === 'hold' ? 'held' : decision.outcome === 'block' ? 'blocked' : 'pending',
       createdAt: this.#now(),
+      judge: judged,
     };
     this.#actions.set(id, action);
     if (verified && auth.share) this.#shares.set(id, [auth.share]);
@@ -285,6 +336,13 @@ export class FamilyTrust {
       verified,
       signals: decision.signals.map((s) => s.id),
     });
+    if (judged) {
+      this.audit.append('judge', 'ai_judge', `${judged.verdict} (${Math.round(judged.risk * 100)}%) → ${judged.effect}`, {
+        requestId: id,
+        model: judged.model,
+        signals: judged.signals,
+      });
+    }
     this.#emit('decision', decision.reasons.join('\n'), id);
     if (decision.notifyFamily) {
       const state =
@@ -734,6 +792,39 @@ export class FamilyTrust {
 
   #requireMember(id: MemberId): void {
     if (!this.#members.has(id)) throw new Error(`unknown member ${id}`);
+  }
+
+  /** Runs the judge with a timeout. Errors, timeouts and malformed verdicts fail closed. */
+  async #runJudge(input: JudgeInput): Promise<JudgeVerdict> {
+    const judge = this.#judge;
+    if (!judge) return failClosedVerdict(input.request.kind, new Error('no judge configured'));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const v = await Promise.race([
+        judge(input),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`judge timed out after ${this.#judgeTimeoutMs}ms`)), this.#judgeTimeoutMs);
+        }),
+      ]);
+      const valid =
+        (v.verdict === 'pass' || v.verdict === 'hold' || v.verdict === 'block') &&
+        typeof v.risk === 'number' &&
+        Array.isArray(v.reasons) &&
+        Array.isArray(v.signals);
+      if (!valid) throw new Error('judge returned a malformed verdict');
+      return { ...v, risk: clamp01(v.risk), model: typeof v.model === 'string' ? v.model : 'unknown' };
+    } catch (error) {
+      return failClosedVerdict(input.request.kind, error);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  #recentLog(limit = 20): JudgeLogEntry[] {
+    return this.audit
+      .entries()
+      .slice(-limit)
+      .map(({ ts, type, actor, summary }) => ({ ts, type, actor, summary }));
   }
 
   #get(requestId: string): PendingAction {
