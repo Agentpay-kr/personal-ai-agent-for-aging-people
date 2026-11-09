@@ -99,6 +99,18 @@ const vote = await mom.post(`/requests/${approval.id}/vote`, { vote: 'approve' }
 check('mom approves → cancelled', vote.body.status === 'done' && vote.body.result.monthlySaved === 17300);
 check('VM state updated', (await son.get('/vm/mom')).subscriptions.filter((s) => s.status === 'cancelled').length === 2);
 
+// ---- family knowledge graph
+check('knowledge needs a session → 401', (await req('GET', '/knowledge?owner=mom')).status === 401);
+const momKnows = (await mom.get('/knowledge?owner=mom')).facts;
+check('mom sees her cancelled subscriptions as facts', momKnows.filter((f) => f.p === 'fa:cancelled').length === 2);
+check('dad (read delegate) sees them too', (await dad.get('/knowledge?owner=mom')).facts.some((f) => f.p === 'fa:cancelled'));
+check('no fact or log carries the password', !JSON.stringify(momKnows).includes(SECRET));
+const someFact = momKnows.find((f) => f.p === 'fa:cancelled');
+check('son cannot forget a fact on mom', (await son.post('/knowledge/retract', { factId: someFact.id })).status === 403);
+check('mom forgets one fact', (await mom.post('/knowledge/retract', { factId: someFact.id })).status === 200);
+const chain = await son.get('/knowledge/verify');
+check('event log hash chain verifies after the forget', chain.ok === true && chain.length > 5);
+
 await son.post(`/rooms/${room.id}/rename`, { name: '우리 가족 💛' });
 await son.post(`/rooms/${room.id}/invite`, { members: ['dad'] });
 const left = await dad.post(`/rooms/${room.id}/leave`);
