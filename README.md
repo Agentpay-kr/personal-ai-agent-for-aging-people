@@ -32,6 +32,8 @@ pnpm start
 
 Node.js 24 이상에서 시작하세요. npm 설치나 웹 앱 체크아웃은 필요 없습니다.
 
+[FA 엔진](fa-engine/README.md)은 카카오톡형 단톡방 데모용 로컬 API 서버(가족 권한 엔진 + Claude 에이전트)입니다. Molla CLI v0.2는 HTTP 없이 독립 실행되므로 FA 엔진 없이도 동작합니다 (`cd fa-engine && npm install && npm start`).
+
 ```sh
 node molla-cli/bin/molla.mjs capabilities
 node molla-cli/bin/molla.mjs health
@@ -43,4 +45,4 @@ v0.2는 로컬 SQLite와 권한·실행 코어를 직접 사용합니다. 승인
 
 ## Family AI Agent 카카오톡 데모
 
-[카카오톡 목업과 중앙 FA 라우터](fa-kakao-demo/README.md)에서 가족별 VM 선택, 조회 위임, 소유자 승인 흐름을 로컬 샘플로 시연합니다.
+[카카오톡 목업과 중앙 FA 라우터](fa-kakao-demo/README.md)에서 가족별 VM 선택, 조회 위임, 소유자 승인 흐름을 로컬 샘플로 시연합니다. 송금 승인·보이스피싱 보류·긴급 잠금 같은 보안 장면은 [fa-trust 보안 코어](fa-trust/README.md)가 판정하고, 채팅방에서 FA를 누르면 열리는 **신뢰 패널**에 표시됩니다.

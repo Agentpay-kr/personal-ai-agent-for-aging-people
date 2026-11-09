@@ -135,11 +135,28 @@ export function createDemoServer(env = process.env) {
         if (!validRouterRequest(body)) {
           return json(response, 400, { error: 'FA 작업 요청을 확인해 주세요.' });
         }
-        const result = router.handle(body);
+        const result = await router.handle(body);
         if (!result) {
           return json(response, 409, { error: '채팅방 참여자가 바뀌었어요. 새 FA 카드에서 시작해 주세요.' });
         }
         return json(response, 200, result);
+      }
+      // fa-trust panel: security events for one demo, and the impostor-approval demo button.
+      if (pathname === '/api/trust' || pathname === '/api/trust/impostor') {
+        const params = new URL(request.url, host.origin).searchParams;
+        const demoId = params.get('demo_id');
+        if (!/^[0-9a-f-]{36}$/i.test(demoId ?? '')) return json(response, 400, { error: 'demo_id가 필요해요.' });
+        const gate = router.trust(demoId);
+        if (!gate) return json(response, 200, { enabled: false });
+        if (request.method === 'GET' && pathname === '/api/trust') {
+          return json(response, 200, gate.snapshot(Number(params.get('since')) || 0));
+        }
+        if (request.method === 'POST' && pathname === '/api/trust/impostor') {
+          if (request.headers.origin && request.headers.origin !== host.origin) {
+            return json(response, 403, { error: '이 데모 페이지에서만 요청할 수 있어요.' });
+          }
+          return json(response, 200, await gate.impostor());
+        }
       }
       if (request.method === 'GET' || request.method === 'HEAD') {
         return await serveStatic(request, response, pathname);

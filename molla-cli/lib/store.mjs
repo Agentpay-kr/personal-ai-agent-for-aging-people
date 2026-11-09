@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, chmodSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { seed } from '../runtime/domain.mjs';
@@ -8,7 +8,12 @@ import { migrate } from '../runtime/ontology.mjs';
 export class Store {
  constructor(path){
   this.path=resolve(path);mkdirSync(dirname(this.path),{recursive:true,mode:0o700});
-  this.db=new DatabaseSync(this.path);this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS state(id INTEGER PRIMARY KEY,data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cli_meta(id INTEGER PRIMARY KEY,runtime_id TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cli_sessions(token_hash TEXT PRIMARY KEY,actor TEXT NOT NULL,expires_at INTEGER NOT NULL);');
+  // Memories, contacts and session hashes live here: create the DB and its WAL/SHM owner-only.
+  const umask=process.umask(0o077);
+  try{
+   this.db=new DatabaseSync(this.path);this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS state(id INTEGER PRIMARY KEY,data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cli_meta(id INTEGER PRIMARY KEY,runtime_id TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cli_sessions(token_hash TEXT PRIMARY KEY,actor TEXT NOT NULL,expires_at INTEGER NOT NULL);');
+  }finally{process.umask(umask);}
+  for(const f of [this.path,`${this.path}-wal`,`${this.path}-shm`])if(existsSync(f))chmodSync(f,0o600);
   this.db.exec('BEGIN IMMEDIATE');try{
    if(!this.db.prepare('SELECT id FROM state WHERE id=1').get())this.db.prepare('INSERT INTO state VALUES(1,?)').run(JSON.stringify(seed()));
    if(!this.db.prepare('SELECT id FROM cli_meta WHERE id=1').get())this.db.prepare('INSERT INTO cli_meta VALUES(1,?)').run(randomUUID());

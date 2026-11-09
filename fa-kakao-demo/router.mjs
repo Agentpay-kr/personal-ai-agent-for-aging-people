@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { createDemoVmAgent, DEMO_SUBSCRIPTIONS, DEMO_VM_BINDINGS } from './vm-agent.mjs';
+import { createTrustGate, isMoneyRequest, TRUST_ACTIONS } from './trust-gate.mjs';
 
 const LABEL = { mom: '엄마', dad: '아빠', son: '아들' };
 const MEMBERS = new Set([...Object.keys(LABEL), 'aunt', 'friend', 'fa']);
-const ACTIONS = new Set(['welcome', 'chat', 'setup', 'login', 'scope', 'deny', 'scan', 'propose', 'approve', 'retire']);
+const ACTIONS = new Set(['welcome', 'chat', 'setup', 'login', 'scope', 'deny', 'scan', 'propose', 'approve', 'retire', ...TRUST_ACTIONS]);
 const FIELDS = new Set(['demo_id', 'room_id', 'members', 'actor', 'action', 'value', 'step_id', 'approval_id']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CANCEL = /(?:해지|구독\s*취소)(?:\s*(?:좀\s*)?(?:해\s*줘(?:요)?|해\s*주세요|해\s*줄래|할래|하고\s*싶어(?:요)?|요청(?:해줘|할게요)?))?[.!。！]?$/;
@@ -77,6 +78,30 @@ function reply(room, text, card, visibleTo) {
       ...(visibleTo && { visibleTo }),
     }] : [],
   };
+}
+
+// Several FA messages in one reply (used by the fa-trust security scenes).
+function replyMany(room, items) {
+  const { phase, owner, step_id } = room.flow;
+  const messages = items.filter((item) => item?.text).map(({ text, card, visibleTo }) => ({
+    by: 'fa',
+    text,
+    ...(card && { card: { ...card, ...(card.actions && { phase, step_id }) } }),
+    ...(visibleTo && { visibleTo }),
+  }));
+  return { handled: messages.length > 0, state: { phase, owner, step_id }, messages };
+}
+
+// Money requests and trust buttons go to fa-trust. Returns a Promise, or null to fall through.
+function routeTrust(room, gate, { actor, action, value }) {
+  if (!gate) return null;
+  if (action === 'chat' && isMoneyRequest(value)) {
+    return gate.fromChat(room, actor, value).then((items) => replyMany(room, items));
+  }
+  if (TRUST_ACTIONS.has(action)) {
+    return gate.button(room, actor, action, value).then((items) => replyMany(room, items));
+  }
+  return null;
 }
 
 function row(label, detail) {
@@ -159,6 +184,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
     ({ action, value, owner: ownerHint } = candidate);
   }
   if (action === 'welcome') return welcome(room);
+  if (TRUST_ACTIONS.has(action)) return reply(room, '보안 기능(fa-trust)이 연결되지 않았어요.');
   if (action === 'transfer') {
     return reply(room, '이 데모에서 송금할 권한은 없어요.', {
       kind: 'blocked', title: '송금 요청 차단',
@@ -284,11 +310,18 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
 
 export function createRouter() {
   const demos = new Map();
+  const demoOf = (demo_id) => {
+    if (!demos.has(demo_id)) demos.set(demo_id, { vm: createDemoVmAgent(), rooms: new Map(), trust: createTrustGate() });
+    return demos.get(demo_id);
+  };
   return {
+    // fa-trust gate for this demo (null when fa-trust is not available).
+    trust(demo_id) {
+      return demoOf(demo_id).trust;
+    },
     handle(command) {
       const { demo_id, room_id, members, action } = command;
-      if (!demos.has(demo_id)) demos.set(demo_id, { vm: createDemoVmAgent(), rooms: new Map() });
-      const { vm, rooms } = demos.get(demo_id);
+      const { vm, rooms, trust } = demoOf(demo_id);
       const signature = members.toSorted().join(',');
       if (!rooms.has(room_id)) {
         const room = { members, signature, connections: new Map() };
@@ -301,7 +334,7 @@ export function createRouter() {
         rooms.set(room_id, null);
         return reply(room);
       }
-      return routeRoom(room, vm, command);
+      return routeTrust(room, trust, command) ?? routeRoom(room, vm, command);
     },
   };
 }

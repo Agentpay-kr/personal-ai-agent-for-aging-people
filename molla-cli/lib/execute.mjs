@@ -4,13 +4,16 @@ import { PolicyEngine } from '../runtime/policy.mjs';
 import { LocalDraftExecutor } from '../runtime/orchestrator.mjs';
 import { AndroidComposeExecutor, PHONE_APPS } from '../runtime/phone.mjs';
 
+export const EXECUTION_LEASE_MS=120000;
+
 export async function execute(store,actor,taskId,{executor,env=process.env}={}){
  const claim=store.transaction(s=>{
   const t=s.tasks.find(t=>t.id===taskId);if(!t)throw new DomainError('작업을 찾을 수 없어요.',404);own(actor,t.owner);
   if(['prepared','completed','needs_verification','failed','cancelled','rejected'].includes(t.status))return {existing:t};
   if(t.status!=='running')throw new DomainError('소유자의 승인 후 실행할 수 있어요.',403);
   if(t.executionStartedAt)throw new DomainError('이미 실행 중이에요. 결과를 확인하고 자동 재실행하지 마세요.',409);
-  new PolicyEngine(s).execute(t);t.executionStartedAt=new Date().toISOString();t.executionId=randomUUID();t.executionLeaseUntil=new Date(Date.now()+60000).toISOString();t.step=1;
+  // Lease must outlast the worst-case ADB run (4 calls x 15 s) so recover can't race a live execution.
+  new PolicyEngine(s).execute(t);t.executionStartedAt=new Date().toISOString();t.executionId=randomUUID();t.executionLeaseUntil=new Date(Date.now()+EXECUTION_LEASE_MS).toISOString();t.step=1;
   return {id:t.id,executionId:t.executionId,action:structuredClone(t.action)};
  });
  if(claim.existing)return {...claim.existing,reused_result:true};
@@ -20,7 +23,9 @@ export async function execute(store,actor,taskId,{executor,env=process.env}={}){
   authorize();const evidence=await handler.execute(claim.action,{authorize});
   return store.transaction(s=>{
    const t=s.tasks.find(t=>t.id===taskId);if(t.status!=='running'||t.executionId!==claim.executionId){t.result='중단 후 실행 응답을 받았어요. 기기에서 결과를 직접 확인해 주세요.';return t;}
-   new PolicyEngine(s).execute(t);
+   // The side effect already happened. If policy changed meanwhile, never report "failed"
+   // (that invites a duplicate retry): record what happened and ask for a human check.
+   try{new PolicyEngine(s).execute(t);}catch(e){t.status='needs_verification';t.evidence=evidence??null;t.result=`실행은 끝났지만 그 사이 권한이 바뀌었어요(${e.message}). 기기에서 결과를 직접 확인해 주세요. 자동 재실행하지 않아요.`;t.finishedAt=new Date().toISOString();log(s,actor,'실행 결과 확인이 필요해요',t.result);return t;}
    if(evidence?.kind==='local_draft'&&evidence.verified===true&&evidence.artifact?.body===claim.action.body){t.status='prepared';t.step=2;}
    else if(claim.action.type==='app.open'&&evidence?.kind==='app_opened'&&evidence.package===PHONE_APPS[claim.action.appId]?.package&&evidence.device===claim.action.device?.serial){t.status=evidence.verified?'completed':'needs_verification';if(evidence.verified)t.step=2;}
    else if(evidence?.kind==='intent_opened')t.status='needs_verification';
