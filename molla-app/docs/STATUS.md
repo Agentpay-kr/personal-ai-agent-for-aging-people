@@ -1,5 +1,7 @@
 # 구현·검증 상태
 
+새 [소유자 API](../apps/api/README.md)는 별도의 인증과 작업 승인을 사용한다. 아래 실제 설정 앱 결과는 기존 서버에서 얻었다. 새 API의 실제 Android 작업과 T world 로그인은 별도 검증 항목이다. [소유자 API 검증](real-agent-verification.md)
+
 2026-11-09, Asia/Seoul. 노랑·검정 Yellow Buddy 앱 디자인을 유지한 실제 연결 구현이다.
 
 | 기능 | 구현·검증 |

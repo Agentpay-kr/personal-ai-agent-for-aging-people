@@ -1,0 +1,13 @@
+{
+  "name": "@molla/api",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=24"},
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "owner": "node --env-file-if-exists=.env scripts/owner.mjs",
+    "verify:live": "node --env-file-if-exists=.env scripts/verify-live.mjs"
+  },
+  "dependencies": {"ajv": "^8.17.1", "fast-xml-parser": "^5.0.0"}
+}

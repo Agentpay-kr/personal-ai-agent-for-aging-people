@@ -1,0 +1,27 @@
+{
+  "at": "2026-11-09T04:20:27.022Z",
+  "testType": "real_provider",
+  "surface": "actual mobile HTTP transport through owner API; not native device rendering",
+  "scenarios": {
+    "A_conversation": {
+      "passed": true,
+      "model": "gpt-4.1-mini",
+      "provider": "letsur"
+    }
+  },
+  "modelCalls": 1,
+  "android": "connection_not_verified",
+  "cleanup": "stopped",
+  "error": "Live connection or verification did not finish. Inspect authorized owner state; no automatic retry.",
+  "passed": false,
+  "cleanupEvidence": {
+    "source": "Phone Harness durable create receipt + worker status",
+    "cleanupComplete": true,
+    "verifiedAt": "2026-11-09T04:26:05.675Z"
+  },
+  "billing": {
+    "usageMinutes": 1,
+    "costCents": 5,
+    "source": "Phone Harness session history"
+  }
+}

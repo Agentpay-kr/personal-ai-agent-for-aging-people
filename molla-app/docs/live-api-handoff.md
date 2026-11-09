@@ -1,5 +1,9 @@
 # Mobile API contract
 
+The current owner API is `apps/api`; see its README and `real-agent-verification.md`. All task approvals now include `expectedActionHash` from `Task.approvalHash`. Mutations carry `Idempotency-Key`; chat/family requests also carry the same stable `requestId`. The server rejects mismatches and unknown actor/owner/device fields. The older contract below describes compatible routes; the current approval hash is mandatory for execution.
+
+Additional lifecycle states are `created`, `planned`, `approved`, `executing`, `verifying`. Completion requires verified evidence. `prepared` remains a local-text artifact only. Task actions include a safe device label and server-assessed risk; raw session IDs and ADB serials are not returned. Family invite/join/decision/request routes grant request-only access with explicit parent acceptance, never shared account administration.
+
 The native client connects to the Molla HTTP JSON API implemented in `server/`. This repository includes its code, not provider credentials or deployed accounts. The independent `molla-cli` package does not provide these HTTP routes. See `STATUS.md` for verified boundaries and unfinished device/deployment work.
 
 ## Identity and transport

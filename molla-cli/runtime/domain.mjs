@@ -4,14 +4,22 @@ import { PolicyEngine } from './policy.mjs';
 import { LocalMemoryStore } from './memory.mjs';
 import { messageDraft } from './drafts.mjs';
 import { PHONE_APPS } from './phone.mjs';
+import { activeStatuses, interruptTask, transition } from './lifecycle.mjs';
 export { id, member, own, log, DomainError } from './core.mjs';
-export function seed(){
+export function seed({live=false}={}){
   const now=new Date().toISOString();
   return migrate({ members: [
-    {id:'mom',name:'엄마',subtitle:'다정한 일상 메이트',color:'peach',initial:'엄',consent:'active',agentName:'몰라',role:'owner',vm:'mom-private',scopes:['shopping','calendar','message']},
+    {id:'mom',name:'엄마',subtitle:'다정한 일상 메이트',color:'peach',initial:'엄',consent:live?'pending':'active',agentName:'몰라',role:'owner',vm:'mom-private',scopes:['shopping','calendar','message']},
     {id:'dad',name:'아빠',subtitle:'새로운 친구를 기다려요',color:'blue',initial:'아',consent:'pending',agentName:'몰라',role:'owner',vm:'dad-private',scopes:['shopping','calendar','message']},
-    {id:'son',name:'나',subtitle:'우리 가족의 든든한 연결',color:'mint',initial:'나',consent:'active',agentName:'몰라',role:'helper',vm:'son-private',scopes:['shopping','calendar','message']}
-  ], tasks:[], messages:[], memories:[{id:id(),owner:'mom',text:'짧고 다정하게 이야기하는 걸 좋아해요.',createdAt:now},{id:id(),owner:'mom',text:'생필품을 살 때는 가격을 먼저 알려주세요.',createdAt:now}], connections:[], invites:[], events:[] });
+    {id:'son',name:'나',subtitle:'우리 가족의 든든한 연결',color:'mint',initial:'나',consent:live?'pending':'active',agentName:'몰라',role:'helper',vm:'son-private',scopes:['shopping','calendar','message']}
+  ], tasks:[], messages:[], memories:live?[]:[{id:id(),owner:'mom',text:'짧고 다정하게 이야기하는 걸 좋아해요.',createdAt:now},{id:id(),owner:'mom',text:'생필품을 살 때는 가격을 먼저 알려주세요.',createdAt:now}], connections:[], invites:[], events:[] });
+}
+export function initializeLiveConsent(s){
+ if(s.liveConsentVersion===1)return;
+ for(const m of s.members){m.consent='pending';m.policyVersion++;m.cloudAI={enabled:false,includeMemories:false,version:m.cloudAI.version+1};}
+ s.memoryGrants=[];
+ for(const t of s.tasks)if(['running','awaiting_approval'].includes(t.status)){t.status='cancelled';t.result='실제 연결 모드의 주인 동의를 새로 확인해 주세요.';}
+ s.liveConsentVersion=1;
 }
 export function classify(text){
  if(/송금|이체|계좌|transfer|bank|remit/i.test(text))return 'finance';
@@ -66,26 +74,26 @@ export function decide(s,actor,taskId,decision){
  if(!['approve','reject','cancel'].includes(decision))throw new DomainError('잘못된 선택이에요.');
  const t=s.tasks.find(t=>t.id===taskId);if(!t)throw new DomainError('작업을 찾을 수 없어요.',404);own(actor,t.owner);
  if(decision==='cancel'){
-   if(!['awaiting_approval','running'].includes(t.status))throw new DomainError('이미 끝난 작업이에요.',409);
-   t.status='cancelled';log(s,actor,'부탁을 취소했어요',t.text);return t;
+   if(!activeStatuses.includes(t.status))throw new DomainError('이미 끝난 작업이에요.',409);
+   interruptTask(s,t,'주인이 작업 중단을 요청했어요. 이미 열린 화면은 직접 확인해 주세요.');return t;
  }
  if(t.status!=='awaiting_approval')throw new DomainError('이미 확인한 요청이에요.',409);
  const m=member(s,actor);if(m.consent!=='active'||!m.scopes.includes(t.kind))throw new DomainError('도움 권한이 해제되었어요.',403);
  if(decision==='approve')t.approval=new PolicyEngine(s).approve(actor,t);
- t.status=decision==='approve'?'running':'rejected';t.startedAt=new Date().toISOString();
+ transition(s,t,decision==='approve'?(t.lifecycleVersion?'approved':'running'):'rejected');t.startedAt=new Date().toISOString();
  log(s,actor,decision==='approve'?'승인한 작업을 시작했어요':'요청을 거절했어요',t.text);return t;
 }
 export function tick(s){
- for(const t of s.tasks.filter(t=>['running','awaiting_approval'].includes(t.status))){
+ for(const t of s.tasks.filter(t=>activeStatuses.includes(t.status))){
    const owner=member(s,t.owner);
-   if(owner.consent!=='active'||!owner.scopes.includes(t.kind)){t.status='cancelled';continue;}
+   if(owner.consent!=='active'||!owner.scopes.includes(t.kind)){interruptTask(s,t,'도움 권한이 철회되었어요.');continue;}
  }
 }
 export function consent(s,actor,value){
  if(!['active','revoked'].includes(value))throw new DomainError('잘못된 동의 값이에요.');
  const m=member(s,actor);m.consent=value;m.policyVersion++;
  if(value!=='active')s.memoryGrants=s.memoryGrants.filter(g=>g.owner!==actor);
- if(value!=='active')for(const t of s.tasks)if(t.owner===actor&&['running','awaiting_approval'].includes(t.status))t.status='cancelled';
+ if(value!=='active')for(const t of s.tasks)if(t.owner===actor)interruptTask(s,t,'도움 동의가 철회되었어요.');
  log(s,actor,value==='active'?'몰라의 도움을 수락했어요':'몰라의 도움을 중단했어요');
 }
 export function snapshot(s,actor){

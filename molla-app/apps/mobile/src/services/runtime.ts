@@ -34,7 +34,7 @@ export function validateCredentials(value: Credentials, allowLocal = false): Cre
 }
 
 /** The token is sent only to the exact configured origin. Never log credentials. */
-export async function apiRequest<T>(credentials: Credentials, path: string, body?: unknown, options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<T> {
+export async function apiRequest<T>(credentials: Credentials, path: string, body?: unknown, options: { timeoutMs?: number; signal?: AbortSignal; requestId?: string } = {}): Promise<T> {
   if (!/^\/[a-z0-9/\-]+$/i.test(path)) throw new ApiError('지원하지 않는 요청이에요.');
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -44,7 +44,7 @@ export async function apiRequest<T>(credentials: Credentials, path: string, body
   try {
     const response = await fetch(`${credentials.baseUrl}/api${path}`, {
       method: body === undefined ? 'GET' : 'POST', credentials: 'omit', redirect: 'error', signal: controller.signal,
-      headers: { Authorization: `Bearer ${credentials.token}`, Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      headers: { Authorization: `Bearer ${credentials.token}`, Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(options.requestId ? { 'Idempotency-Key': options.requestId } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const contentType = response.headers.get('content-type') || '';
