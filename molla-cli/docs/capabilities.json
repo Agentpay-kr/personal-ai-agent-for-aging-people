@@ -1,0 +1,337 @@
+{
+  "name": "molla",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "transport": "local-http-cookie",
+  "production_auth": false,
+  "operations": [
+    {
+      "name": "health",
+      "arguments": {},
+      "read_only": true,
+      "requires_session": false
+    },
+    {
+      "name": "identity.get",
+      "arguments": {},
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "family.list",
+      "arguments": {},
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "family.invite",
+      "arguments": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "max": 20
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "family.join",
+      "arguments": {
+        "code": {
+          "type": "string",
+          "required": true,
+          "max": 8
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "task.create",
+      "arguments": {
+        "text": {
+          "type": "string",
+          "required": true,
+          "max": 1000
+        },
+        "owner": {
+          "type": "string",
+          "required": false,
+          "max": 100
+        },
+        "draft": {
+          "type": "string",
+          "required": false,
+          "max": 1000
+        },
+        "contactId": {
+          "type": "string",
+          "required": false,
+          "max": 100
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "task.list",
+      "arguments": {
+        "status": {
+          "type": "string",
+          "required": false,
+          "values": [
+            "awaiting_approval",
+            "running",
+            "prepared",
+            "needs_verification",
+            "failed",
+            "completed",
+            "rejected",
+            "cancelled"
+          ]
+        }
+      },
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "task.get",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        }
+      },
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "task.decide",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        },
+        "decision": {
+          "type": "string",
+          "required": true,
+          "values": [
+            "approve",
+            "reject",
+            "cancel"
+          ]
+        },
+        "ownerConfirmed": {
+          "type": "boolean",
+          "required": false
+        },
+        "expectedActionHash": {
+          "type": "string",
+          "required": false,
+          "max": 64
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "memory.list",
+      "arguments": {},
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "memory.search",
+      "arguments": {
+        "query": {
+          "type": "string",
+          "required": false,
+          "max": 300
+        }
+      },
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "memory.remember",
+      "arguments": {
+        "text": {
+          "type": "string",
+          "required": true,
+          "max": 300
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "memory.correct",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "max": 300
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "memory.forget",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "memory.shared",
+      "arguments": {},
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "memory.share",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        },
+        "grantee": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "memory.revoke",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        },
+        "grantee": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "contact.list",
+      "arguments": {},
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "contact.add",
+      "arguments": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "max": 40
+        },
+        "relation": {
+          "type": "string",
+          "required": true,
+          "max": 20
+        },
+        "phone": {
+          "type": "string",
+          "required": true,
+          "max": 24
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "contact.remove",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "ontology.get",
+      "arguments": {},
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "vm.diagnose",
+      "arguments": {},
+      "read_only": true,
+      "requires_session": true
+    },
+    {
+      "name": "vm.compose.plan",
+      "arguments": {
+        "contactId": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        },
+        "draft": {
+          "type": "string",
+          "required": true,
+          "max": 1000
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "consent.set",
+      "arguments": {
+        "value": {
+          "type": "string",
+          "required": true,
+          "values": [
+            "active",
+            "revoked"
+          ]
+        },
+        "ownerConfirmed": {
+          "type": "boolean",
+          "required": true
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    }
+  ],
+  "approval": {
+    "operation": "task.decide",
+    "owner_confirmation_required": true,
+    "action_hash_required": true
+  },
+  "vm": {
+    "per_owner": true,
+    "automatic_sending": false
+  }
+}

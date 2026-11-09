@@ -1,0 +1,4 @@
+interface:
+  display_name: "Molla Router"
+  short_description: "Route Molla tasks through an owner-aware JSON CLI"
+  default_prompt: "Use $molla-router to route this request through the Molla CLI and report its observed status."
