@@ -29,6 +29,7 @@ const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
 const FIELDS = new Set(['demo_id', 'room_id', 'members', 'actor', 'action', 'value', 'step_id', 'approval_id']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CANCEL = /(?:해지|구독\s*취소)(?:\s*(?:좀\s*)?(?:해\s*줘(?:요)?|해\s*주세요|해\s*줄래|할래|하고\s*싶어(?:요)?|요청(?:해줘|할게요)?))?[.!。！]?$/;
+const INFORMATION_QUESTION = /[?？]|방법|어떻게|뭐야|무슨 뜻|할 수 있|(?:송금|이체)\s*수수료/;
 const space = (owner) => `${LABEL[owner]}의 VM`;
 
 function isId(value) {
@@ -70,13 +71,31 @@ function parseTransfer(query, actor) {
   };
 }
 
-function intent(text, actor) {
+const TRUST_CONTROLS = new Set(['lock', 'unlock', 'cancel', 'impostor']);
+const trustContext = (body) => isId(body?.demo_id) && isId(body?.room_id)
+  && MEMBERS.has(body.actor) && body.actor !== 'fa';
+
+export function validTrustRequest(body, method) {
+  if (!trustContext(body)) return false;
+  const contextFields = ['demo_id', 'room_id', 'actor'];
+  if (method === 'GET') {
+    return Object.keys(body).every((key) => [...contextFields, 'since'].includes(key))
+      && (body.since === undefined || /^\d{1,15}$/.test(body.since));
+  }
+  return Object.keys(body).every((key) => [...contextFields, 'action', 'action_id'].includes(key))
+    && TRUST_CONTROLS.has(body.action)
+    && (body.action === 'cancel' ? typeof body.action_id === 'string' && /^req_[0-9a-f]{12}$/.test(body.action_id) : body.action_id === undefined);
+}
+
+function intent(text, actor, allowTransferFallback) {
   const query = stripFaMention(text);
-  if (/송금|이체|계좌.*(?:옮겨|보내)/.test(query)) return { action: 'transfer', transfer: parseTransfer(query, actor) };
   if (/^(?:해지 )?승인\s*(?:해요|할게요?|합니다|하겠습니다)[.!。！]?$/.test(query)) return { action: 'approve' };
   if (/^(?:구독 (?:목록 보기|읽기)를? )?허용\s*(?:해요|할게요?|합니다|하겠습니다)[.!。！]?$/.test(query)) return { action: 'scope' };
   if (/^(?:거절|안 할래|안할래|허용 안 함|승인 안 함|해지하지 마|구독 유지할게요)[.!。！]?$/.test(query)) return { action: 'deny' };
-  if (/[?？]|방법|어떻게|뭐야|무슨 뜻|할 수 있|라고|따옴표|하지\s*마|취소하지|해지 안/.test(query)) return null;
+  if (INFORMATION_QUESTION.test(query) || /라고|따옴표|하지\s*마|취소하지|해지 안/.test(query)) return null;
+  if (allowTransferFallback && /송금|이체|계좌.*(?:옮겨|보내)/.test(query)) {
+    return { action: 'transfer', transfer: parseTransfer(query, actor) };
+  }
 
   const services = DEMO_SUBSCRIPTIONS.filter(({ match }) => match.test(query));
   const owners = new Set();
@@ -134,15 +153,20 @@ function replyMany(room, items) {
 }
 
 // Money requests and trust buttons go to fa-trust. Returns a Promise, or null to fall through.
-function routeTrust(room, gate, { actor, action, value }) {
-  if (!gate) return null;
-  if (action === 'chat' && isMoneyRequest(value)) {
-    return gate.fromChat(room, actor, value).then((items) => replyMany(room, items));
-  }
-  if (TRUST_ACTIONS.has(action)) {
-    return gate.button(room, actor, action, value).then((items) => replyMany(room, items));
-  }
-  return null;
+function routeTrust(room, demo, { room_id, actor, action, value }) {
+  const isTransfer = action === 'chat' && !INFORMATION_QUESTION.test(value) && isMoneyRequest(value);
+  if (!demo.trust || (!isTransfer && !TRUST_ACTIONS.has(action))) return null;
+  return queueTrust(demo, async () => {
+    if (demo.rooms.get(room_id) !== room) return null;
+    const items = isTransfer ? await demo.trust.fromChat(room, actor, value) : await demo.trust.button(room, actor, action, value);
+    return replyMany(room, items);
+  });
+}
+
+function queueTrust(demo, action) {
+  const result = demo.trustQueue.then(action);
+  demo.trustQueue = result.catch(() => {});
+  return result;
 }
 
 function row(label, detail) {
@@ -307,20 +331,20 @@ function readList(room, vm, actor, owner, grant) {
   return listCard(room);
 }
 
-function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
+function routeRoom(room, vm, { actor, action, value, step_id, approval_id }, allowTransferFallback) {
   const fromChat = action === 'chat';
   let ownerHint;
   let transfer;
   if (fromChat) {
-    const candidate = intent(value, actor);
+    const candidate = intent(value, actor, allowTransferFallback);
     if (!candidate) return reply(room);
     ({ action, value, owner: ownerHint, transfer } = candidate);
   }
   if (action === 'welcome') return welcome(room);
   if (TRUST_ACTIONS.has(action)) return reply(room, '보안 기능(fa-trust)이 연결되지 않았어요.');
-  // Reached only when fa-trust didn't take the money request (e.g. fa-trust isn't available).
+  // Transfer drafts only exist when the trust gate itself is unavailable.
   if (action === 'transfer') return proposeTransfer(room, actor, transfer);
-  if (room.flow.phase === 'awaiting-cosign') {
+  if (allowTransferFallback && room.flow.phase === 'awaiting-cosign') {
     if (!['cosign', 'approve', 'deny'].includes(action)) return reply(room, '진행 중인 송금 승인을 먼저 마무리해 주세요.');
     if (!fromChat && room.flow.step_id !== step_id) {
       return reply(room, '이 요청은 바뀌었거나 끝났어요. 최근 FA 카드를 확인해 주세요.');
@@ -456,18 +480,33 @@ export function createRouter({ trust: useTrust = true } = {}) {
   const demos = new Map();
   const demoOf = (demo_id) => {
     if (!demos.has(demo_id)) {
-      demos.set(demo_id, { vm: createDemoVmAgent(), rooms: new Map(), trust: useTrust ? createTrustGate() : null });
+      demos.set(demo_id, {
+        vm: createDemoVmAgent(), rooms: new Map(),
+        trust: useTrust ? createTrustGate() : null, trustQueue: Promise.resolve(),
+      });
     }
     return demos.get(demo_id);
   };
   return {
-    // fa-trust gate for this demo (null when fa-trust is not available).
-    trust(demo_id) {
-      return demoOf(demo_id).trust;
+    async trustProfile({ demo_id, room_id, actor, since, action, action_id }) {
+      const demo = demos.get(demo_id);
+      const room = demo?.rooms.get(room_id);
+      const notFound = { status: 404, body: { error: '이 방에서 FA를 먼저 불러 주세요.' } };
+      if (!room) return notFound;
+      if (!Object.hasOwn(LABEL, actor) || !room.members.includes(actor)) {
+        return { status: 403, body: { error: '이 방에 참여한 등록 가족만 보안 프로필을 볼 수 있어요.' } };
+      }
+      if (!demo.trust) return { status: 200, body: { enabled: false } };
+      return queueTrust(demo, async () => {
+        if (demo.rooms.get(room_id) !== room) return notFound;
+        if (action) return demo.trust.control(room, actor, action, action_id);
+        return { status: 200, body: await demo.trust.profile(room, actor, Number(since || 0)) };
+      });
     },
     handle(command) {
       const { demo_id, room_id, members, action } = command;
-      const { vm, rooms, trust } = demoOf(demo_id);
+      const demo = demoOf(demo_id);
+      const { vm, rooms, trust } = demo;
       const signature = members.toSorted().join(',');
       if (!rooms.has(room_id)) {
         const room = { members, signature, connections: new Map() };
@@ -478,9 +517,10 @@ export function createRouter({ trust: useTrust = true } = {}) {
       if (!room || room.signature !== signature) return null;
       if (action === 'retire') {
         rooms.set(room_id, null);
+        trust?.retire(room);
         return reply(room);
       }
-      return routeTrust(room, trust, command) ?? routeRoom(room, vm, command);
+      return routeTrust(room, demo, command) ?? routeRoom(room, vm, command, !trust);
     },
   };
 }

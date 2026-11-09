@@ -1,192 +1,107 @@
-// fa-trust panel: tap FA in a chat (profile, name or speech bubble) to open it.
-// A simple sheet: one status line, the last 3 security events, and "자세히" for the rest.
-// Self-contained: reads the demo id the chat app stores, polls /api/trust, no changes to app.mjs.
+import { avatar, icon, people } from './visual.mjs';
 
-const STORE_KEY = 'family-agent-kakao-demo-v1';
-const TYPES = {
-  decision: ['🧭', '정책 판정'],
-  family_alert: ['👨‍👩‍👦', '가족에게 알림'],
-  approval: ['🔏', '기기 승인'],
-  scheduled: ['⏳', '실행 대기'],
-  executed: ['✅', '실행 완료'],
-  shredded: ['🔥', '데이터 소멸'],
-  evidence: ['🧾', '증거 봉인'],
-  proof_failed: ['🎭', '사칭 차단'],
-  lockdown: ['🔒', '긴급 잠금'],
-  self_destruct: ['💥', '자동 소멸'],
-  unlocked: ['🔓', '잠금 해제'],
-  linked: ['🔑', '계정 연결'],
-  rejected: ['🛑', '취소'],
-  expired: ['⌛', '만료'],
-  member_removed: ['🚪', '구성원 제거'],
+const eventNames = {
+  decision: '정책 판정', family_alert: '가족 알림', approval: '기기 승인', scheduled: '실행 예약',
+  executed: '실행 완료', shredded: '세션 폐기', evidence: '증거 봉인', proof_failed: '사칭 차단',
+  lockdown: '긴급 잠금', self_destruct: '자동 소멸', unlocked: '잠금 해제', linked: '계정 연결',
+  rejected: '요청 취소', expired: '요청 만료', member_removed: '구성원 제거',
 };
-// Shown in "최근" (others such as info stay in the full list only).
-const HEADLINE = new Set(Object.keys(TYPES));
-
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const time = (ts) => new Date(ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-const firstLine = (s) => String(s ?? '').split('\n')[0].replace(/^[^\p{L}\d"“]+/u, '');
-
-function demoId() {
-  try {
-    return JSON.parse(localStorage.getItem(STORE_KEY))?.routerDemoId ?? null;
-  } catch {
-    return null;
-  }
-}
-
-let open = false;
-let details = false;
-let currentDemo = null;
-let since = 0;
-let events = [];
-let snap = null;
-let unseen = 0;
-
-const sheet = document.createElement('div');
-sheet.className = 'trust-sheet-root';
-sheet.hidden = true;
-document.body.append(sheet);
-
-function setOpen(value) {
-  open = value;
-  if (open) unseen = 0;
-  if (!open) details = false;
-  sheet.hidden = !open;
-  document.body.classList.toggle('trust-unseen', unseen > 0);
-  render();
-}
-
-// Tap FA's profile, name or bubble in a chat (not the card buttons) to open the panel.
-document.addEventListener('click', (event) => {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  if (target.closest('.trust-sheet-root')) return;
-  const fromDrawer = target.closest('.drawer-bot');
-  const message = target.closest('article.message.theirs[data-sender="fa"]');
-  if (!fromDrawer && !message) return;
-  if (message && (target.closest('.fa-card') || target.closest('button, a, input, select, textarea'))) return;
-  event.preventDefault();
-  setOpen(true);
+const actionStates = { pending: '승인 대기', held: '확인 보류', scheduled: '실행 대기' };
+const displayTime = new Intl.DateTimeFormat('ko-KR', {
+  hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Seoul',
 });
-document.addEventListener('keydown', (event) => {
-  if (open && event.key === 'Escape') setOpen(false);
-});
+const esc = text => String(text ?? '').replace(/[&<>"']/g, c => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+})[c]);
 
-function status() {
-  const lastLock = events
-    .slice()
-    .reverse()
-    .find((e) => e.type === 'lockdown' || e.type === 'self_destruct' || e.type === 'unlocked');
-  if (lastLock?.type === 'self_destruct') {
-    return ['danger', '💥 외부 침해로 자동 소멸됨', '세션과 기억을 지웠어요. 남은 건 봉인된 증거와 감사 기록뿐이에요.'];
-  }
-  if (lastLock?.type === 'lockdown') return ['danger', '🔒 긴급 잠금 중', '가족 2명이 기기로 동의하면 풀려요.'];
-  const actions = snap?.actions ?? [];
-  const held = actions.filter((a) => a.status === 'held');
-  if (held.length) return ['warn', `⏸️ 보류 중인 요청 ${held.length}건`, firstLine(held.at(-1).summary) + ' · 가족 확인이 필요해요.'];
-  const waiting = actions.filter((a) => a.status === 'pending' || a.status === 'scheduled');
-  if (waiting.length) return ['warn', `⏳ 승인 대기 ${waiting.length}건`, waiting.at(-1).summary];
-  return ['ok', '🟢 안전해요', '돈이 나가는 일은 가족 승인 없이 실행되지 않아요.'];
+function securityStatus(snapshot, waiting) {
+  // fa-trust self-destructs on intrusion (takeover, hacking, contamination); show that apart from a lockdown.
+  const lastLock = (snapshot.events ?? []).filter(e => ['lockdown', 'self_destruct', 'unlocked'].includes(e.type)).at(-1);
+  if (snapshot.locked && lastLock?.type === 'self_destruct') return {
+    tone: 'locked', icon: 'lock', title: '외부 침해로 자동 소멸됨',
+    body: `세션과 기억을 지웠고, 남은 건 봉인된 증거와 감사 기록뿐이에요. 가족 기기 두 대가 동의하면 다시 시작해요. (${snapshot.unlockVotes ?? 0}/2)`,
+  };
+  if (snapshot.locked) return {
+    tone: 'locked', icon: 'lock', title: '송금 긴급 잠금 중',
+    body: `등록된 가족 기기 두 대가 동의하면 잠금이 풀려요. (${snapshot.unlockVotes ?? 0}/2)`,
+  };
+  if (waiting.length) return {
+    tone: 'waiting', icon: 'info', title: '확인이 필요한 송금', body: '요청 상태를 확인하고 필요하면 취소할 수 있어요.',
+  };
+  return {
+    tone: 'ready', icon: 'shield', title: '송금 보호 켜짐', body: '승인이 필요한 송금은 등록된 가족 기기의 동의를 받아요.',
+  };
 }
 
-function facts() {
-  const bank = snap?.links?.find((l) => l.owner === 'mom' && l.service === 'bank');
-  const list = [
-    bank ? '🔑 열쇠 3조각 중 2개 필요' : '🔑 연결된 열쇠 없음',
-    `🧾 증거 ${snap?.evidence?.length ?? 0}건`,
-    `📜 기록 ${snap?.audit?.count ?? 0}건 ${snap?.audit?.verified === false ? '⚠️' : '✓'}`,
-  ];
-  return list.map((f) => `<span>${esc(f)}</span>`).join('');
+function command(action, label, busy, options = {}) {
+  const { requestId, variant = 'secondary' } = options;
+  return `<button type="button" class="trust-button ${variant}" data-action="trust-command" data-command="${action}"
+    ${requestId ? `data-request-id="${esc(requestId)}"` : ''} ${busy ? 'disabled' : ''}>${esc(label)}</button>`;
 }
 
-function eventRow(e) {
-  const [icon, label] = TYPES[e.type] ?? ['ℹ️', '알림'];
-  return `<li><span class="trust-ico">${icon}</span><div><strong>${esc(label)}</strong><p>${esc(firstLine(e.message))}</p></div><time>${time(e.ts)}</time></li>`;
+function eventRow(event) {
+  const ts = Number(event.ts);
+  const firstLine = String(event.message ?? '').split('\n')[0];
+  return `<li><div><strong>${esc(eventNames[event.type] ?? '보안 알림')}</strong>${firstLine ? `<p>${esc(firstLine)}</p>` : ''}</div>
+    <time>${Number.isFinite(ts) ? displayTime.format(ts) : ''}</time></li>`;
 }
 
-let lastKey = '';
-
-function render(force = false) {
-  if (!open) {
-    lastKey = '';
-    return;
-  }
-  // Redraw only when something changed, so buttons don't get replaced under the pointer.
-  const key = JSON.stringify([since, details, snap?.enabled, snap?.actions?.map((a) => a.status), snap?.links?.length, snap?.evidence?.length, snap?.audit?.count]);
-  if (!force && key === lastKey) return;
-  lastKey = key;
-  if (snap && snap.enabled === false) {
-    sheet.innerHTML = `<div class="trust-backdrop"></div><section class="trust-sheet" role="dialog" aria-label="신뢰 패널">
-      <header><strong>🛡️ 치즈 신뢰 패널</strong><button type="button" class="trust-close" aria-label="닫기">✕</button></header>
-      <p class="trust-off">보안 코어(fa-trust)가 연결되지 않았어요.</p></section>`;
-    bind();
-    return;
-  }
-  const [tone, title, sub] = status();
-  const recent = events.filter((e) => HEADLINE.has(e.type)).slice(-3).reverse();
-  sheet.innerHTML = `<div class="trust-backdrop"></div>
-    <section class="trust-sheet" role="dialog" aria-label="신뢰 패널">
-      <header><strong>🛡️ 치즈 신뢰 패널</strong><button type="button" class="trust-close" aria-label="닫기">✕</button></header>
-      <div class="trust-status ${tone}"><strong>${esc(title)}</strong><p>${esc(sub)}</p></div>
-      <div class="trust-facts">${facts()}</div>
-      <h3>최근 보안 기록</h3>
-      <ul class="trust-recent">${recent.length ? recent.map(eventRow).join('') : '<li class="trust-none">아직 기록이 없어요. 송금을 요청해 보세요.</li>'}</ul>
-      <button type="button" class="trust-more" aria-expanded="${details}">${details ? '접기 ▴' : '자세히 ▾'}</button>
-      ${details ? `<div class="trust-details">
-        <ul class="trust-all">${events.slice().reverse().map((e) => {
-          const [icon, label] = TYPES[e.type] ?? ['ℹ️', '알림'];
-          return `<li><div class="trust-all-head"><span>${icon} ${esc(label)}</span><time>${time(e.ts)}</time></div><p>${esc(e.message).replace(/\n/g, '<br>')}</p></li>`;
-        }).join('')}</ul>
-        <button type="button" class="trust-impostor">🎭 데모: 사칭범이 엄마 이름으로 승인 시도</button>
-        <p class="trust-note">LLM은 할 일을 제안만 하고, 실행 여부는 보안 코어 코드가 정해요.</p>
-      </div>` : ''}
-    </section>`;
-  bind();
+function waitingRows(actions, busy) {
+  return actions.map(action => `<li><div><span class="trust-request-state">${actionStates[action.status]}</span>
+    <strong>${esc(action.summary || '송금 요청')}</strong><small>${esc(people[action.requester]?.name || '가족')} 요청</small></div>
+    ${action.canCancel ? command('cancel', '요청 취소', busy, {requestId:action.id}) : ''}</li>`).join('');
 }
 
-function bind() {
-  sheet.querySelector('.trust-backdrop')?.addEventListener('click', () => setOpen(false));
-  sheet.querySelector('.trust-close')?.addEventListener('click', () => setOpen(false));
-  sheet.querySelector('.trust-more')?.addEventListener('click', () => {
-    details = !details;
-    render();
-  });
-  sheet.querySelector('.trust-impostor')?.addEventListener('click', impostor);
+function trustFacts(snapshot) {
+  const facts = [
+    ['연결된 계정', snapshot.linkCount],
+    ['봉인된 증거', snapshot.evidenceCount],
+    ['감사 기록', snapshot.audit?.count],
+  ].filter(([, value]) => Number.isInteger(value) && value >= 0);
+  return facts.length ? `<dl class="trust-facts" aria-label="보안 요약">${facts.map(([label, value]) =>
+    `<div><dt>${label}</dt><dd>${value}건</dd></div>`).join('')}</dl>` : '';
 }
 
-async function impostor() {
-  const id = demoId();
-  if (!id) return;
-  const res = await fetch(`/api/trust/impostor?demo_id=${id}`, { method: 'POST' }).then((r) => r.json()).catch(() => null);
-  if (res && !res.ok && res.message) alert(res.message);
-  poll();
-}
+export function renderTrustProfile({roomName, canOpenChat, snapshot, busy, notice, error, confirmLock}) {
+  const name = esc(people.fa.name);
+  const waiting = (snapshot?.actions ?? []).filter(action => Object.hasOwn(actionStates, action.status));
+  const alert = snapshot?.locked || waiting.some(action => action.status === 'held');
+  const mood = waiting.length ? 'thinking' : 'profile';
+  const header = `<header class="trust-profile-header">${avatar('fa',52,alert ? 'alert' : mood)}<div><h2 id="modal-title">${name}</h2>
+    <p>${esc(people.fa.description)}</p></div><button type="button" class="trust-close" data-action="close-dialog" aria-label="닫기">${icon('close',20)}</button></header>`;
+  const footer = canOpenChat
+    ? `<footer class="trust-profile-footer"><button type="button" class="trust-button secondary" data-action="profile-chat" data-id="fa">${icon('chat',17)} ${name} 채팅 열기</button></footer>` : '';
+  if (!roomName) return `${header}<div class="trust-profile-body">
+    <div class="trust-empty"><strong>${name} 송금 보안</strong><p>${name}와 같은 채팅방에 참여하면 보안 상태를 볼 수 있어요.</p></div></div>${footer}`;
 
-async function poll() {
-  const id = demoId();
-  if (!id) return;
-  if (id !== currentDemo) {
-    currentDemo = id;
-    since = 0;
-    events = [];
-    unseen = 0;
-  }
-  try {
-    const res = await fetch(`/api/trust?demo_id=${id}&since=${since}`, { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return;
-    snap = await res.json();
-    if (snap.events?.length) {
-      events.push(...snap.events);
-      since = snap.events.at(-1).seq;
-      if (!open) unseen += snap.events.filter((e) => e.type !== 'linked').length;
-    }
-    document.body.classList.toggle('trust-unseen', unseen > 0);
-    render();
-  } catch {
-    // Server restarting; try again on the next tick.
-  }
+  const controls = snapshot?.controls ?? {};
+  const recent = (snapshot?.events ?? []).filter(event => Object.hasOwn(eventNames, event.type)).slice().reverse();
+  const status = snapshot?.enabled ? securityStatus(snapshot, waiting) : null;
+  const facts = status ? trustFacts(snapshot) : '';
+  const statusText = error || (snapshot?.enabled === false ? '이 데모에 송금 보안이 연결되지 않았어요.'
+    : busy ? '보안 상태를 확인하고 있어요.' : '이 방의 보안 상태를 아직 확인할 수 없어요.');
+  const lockControl = snapshot?.locked && controls.canUnlock
+    ? command('unlock','잠금 해제 동의',busy)
+    : controls.canLock && !snapshot?.locked && !confirmLock ? command('lock','긴급 잠금',busy,{variant:'danger'}) : '';
+  return `${header}<div class="trust-profile-body" aria-busy="${Boolean(busy)}">
+    <div class="trust-section-title"><div><h3>송금 보안</h3><p>${esc(roomName)}</p></div>
+      <button type="button" class="trust-refresh" data-action="trust-refresh" ${busy ? 'disabled' : ''}>새로고침</button></div>
+    ${status ? `<section class="trust-profile-status ${status.tone}"><span class="trust-status-icon">${icon(status.icon,20)}</span>
+      <div><strong>${status.title}</strong><p>${esc(status.body)}</p></div>${lockControl}</section>`
+      : `<div class="trust-empty"><p>${esc(statusText)}</p></div>`}
+    ${confirmLock ? `<section class="trust-lock-confirm">
+      <p>송금을 잠그고 처리 중인 송금 요청을 취소할까요?</p>
+      <div><button type="button" class="trust-button secondary" data-action="trust-cancel-confirm">돌아가기</button>
+      ${command('lock','송금 잠금',busy,{variant:'danger'})}</div></section>` : ''}
+    ${notice || (status && error) ? `<p class="trust-notice" role="status">${esc(error || notice)}</p>` : ''}
+    ${status ? `<section class="trust-profile-section"><div class="trust-section-title"><h3>처리 중인 요청</h3><span>${waiting.length}건</span></div>
+        ${waiting.length ? `<ul class="trust-request-list">${waitingRows(waiting,busy)}</ul>` : '<p class="trust-empty-line">처리 중인 요청이 없어요.</p>'}</section>
+      <section class="trust-profile-section"><div class="trust-section-title"><h3>최근 보안 기록</h3><span>${snapshot.audit?.verified ? '기록 검증됨' : '기록 확인 필요'}</span></div>
+        ${recent.length ? `<ul class="trust-event-list">${recent.slice(0,3).map(eventRow).join('')}</ul>` : '<p class="trust-empty-line">이 방에 표시할 기록이 없어요.</p>'}
+        ${recent.length > 3 || controls.canImpostor || facts ? `<details><summary>자세히 보기</summary>
+          ${facts}
+          ${recent.length > 3 ? `<ul class="trust-event-list">${recent.slice(3,10).map(eventRow).join('')}</ul>` : ''}
+          ${controls.canImpostor ? command('impostor','사칭 승인 차단 시연',busy) : ''}</details>` : ''}
+      </section><p class="trust-scope-note">데모 송금에 적용돼요. 구독 해지는 계정 주인이 따로 승인해요.</p>` : ''}
+    </div>${footer}`;
 }
-
-poll();
-setInterval(poll, 1000);

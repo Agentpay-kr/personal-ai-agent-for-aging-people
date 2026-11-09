@@ -16,18 +16,27 @@ async function demo(t) {
   const base = `http://127.0.0.1:${server.address().port}`;
   const demo_id = randomUUID();
   const room_id = randomUUID();
-  async function act(actor, action, value) {
-    const response = await fetch(`${base}/api/router`, {
+  async function send(actor, action, value, room = room_id, members = family) {
+    return fetch(`${base}/api/router`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ demo_id, room_id, members: family, actor, action, value }),
+      body: JSON.stringify({ demo_id, room_id: room, members, actor, action, value }),
     });
+  }
+  async function act(actor, action, value, room = room_id, members = family) {
+    const response = await send(actor, action, value, room, members);
     assert.equal(response.status, 200);
     return response.json();
   }
-  const trust = async (since = 0) => (await fetch(`${base}/api/trust?demo_id=${demo_id}&since=${since}`)).json();
-  const impostor = async () => (await fetch(`${base}/api/trust/impostor?demo_id=${demo_id}`, { method: 'POST' })).json();
-  return { act, trust, impostor };
+  const profile = (actor = 'son', room = room_id, since = 0) => fetch(`${base}/api/trust?${new URLSearchParams({ demo_id, room_id: room, actor, since })}`);
+  const control = (actor, action, action_id, room = room_id) => fetch(`${base}/api/trust/action`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ demo_id, room_id: room, actor, action, action_id }),
+  });
+  const trust = async () => (await profile()).json();
+  const impostor = async () => (await control('son', 'impostor')).json();
+  return { act, trust, impostor, profile, control };
 }
 
 const cardOf = (reply) => reply.messages.find((m) => m.card)?.card;
@@ -80,7 +89,7 @@ test('voice phishing (fraud) is held, evidence sealed, scam report locks down', 
     assert.ok(snap.events.some((e) => e.type === type), `missing ${type}`);
   }
   assert.ok(!snap.events.some((e) => e.type === 'self_destruct'), 'fraud is not an intrusion');
-  assert.equal(snap.evidence.length, 1);
+  assert.equal(snap.evidenceCount, 1);
 
   // Two family devices unlock it again.
   await act('son', 'trust_unlock', 'unlock');
@@ -91,18 +100,94 @@ test('voice phishing (fraud) is held, evidence sealed, scam report locks down', 
 test('impostor approval (takeover) self-destructs FA; sealed evidence remains', { skip: !trustAvailable() }, async (t) => {
   const { act, trust, impostor } = await demo(t);
   await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
-  const fake = await impostor();
-  assert.equal(fake.ok, true);
-  assert.equal(fake.status, 'cancelled');
+  assert.equal((await impostor()).status, 'cancelled');
   const snap = await trust();
   assert.ok(snap.events.some((e) => e.type === 'proof_failed'));
   assert.ok(snap.events.some((e) => e.type === 'self_destruct' && /탈취/.test(e.message)));
-  assert.equal(snap.evidence.length, 1);
-  assert.equal(snap.links.length, 0);
+  assert.equal(snap.locked, true);
+  assert.equal(snap.evidenceCount, 1);
+  assert.equal(snap.linkCount, 0);
 });
 
 test('subscription chat is not taken over by the trust gate', async (t) => {
   const { act } = await demo(t);
   const reply = await act('son', 'chat', '엄마 구독 좀 정리해줘');
   assert.notEqual(cardOf(reply)?.kind, 'blocked');
+});
+
+test('the profile only exposes current room transfers and rejects unknown, guest and retired room access', { skip: !trustAvailable() }, async (t) => {
+  const { act, profile, control } = await demo(t);
+  const other = randomUUID();
+  const asked = cardOf(await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘'));
+  const requestId = buttonOf(asked, 'trust_approve').value;
+  assert.equal((await profile('son', other)).status, 404);
+  await act('son', 'welcome', undefined, other, ['son', 'aunt', 'fa']);
+  const otherProfile = await (await profile('son', other)).json();
+  assert.equal(otherProfile.enabled, true);
+  assert.deepEqual(otherProfile.actions, []);
+  assert.ok(!JSON.stringify(otherProfile).includes('500,000원'));
+  assert.equal((await profile('mom', other)).status, 403);
+  assert.equal((await profile('aunt', other)).status, 403);
+  assert.equal((await control('aunt', 'lock', undefined, other)).status, 403);
+  assert.equal((await control('son', 'cancel', requestId, other)).status, 409);
+  const otherApproval = await act('son', 'trust_approve', requestId, other, ['son', 'aunt', 'fa']);
+  assert.match(otherApproval.messages[0].text, /요청을 찾을 수 없어요/);
+  assert.ok((await (await profile()).json()).actions.some(({ id }) => id === requestId));
+
+  await act('son', 'retire', undefined, other, ['son', 'aunt', 'fa']);
+  assert.equal((await profile('son', other)).status, 404);
+});
+
+test('scope and roles match the real transfer gate for cancel, emergency lock, and two-device unlock', { skip: !trustAvailable() }, async (t) => {
+  const { act, profile, control } = await demo(t);
+  const requested = cardOf(await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘'));
+  const id = buttonOf(requested, 'trust_approve').value;
+  assert.equal((await (await profile()).json()).actions.find((a) => a.id === id).canCancel, false);
+  assert.equal((await control('son', 'cancel', id)).status, 403);
+  await act('mom', 'trust_approve', id);
+  await act('son', 'trust_approve', id);
+  assert.equal((await (await profile()).json()).actions.find((a) => a.id === id).canCancel, true);
+  const cancelled = await control('son', 'cancel', id);
+  assert.equal(cancelled.status, 200);
+  assert.ok(!(await cancelled.json()).actions.some((a) => a.id === id));
+
+  await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
+  const locked = await control('son', 'lock');
+  assert.equal(locked.status, 200);
+  const snapshot = await locked.json();
+  assert.equal(snapshot.locked, true);
+  assert.equal(snapshot.scope, 'transfers');
+  assert.equal(snapshot.linkCount, 0);
+  assert.deepEqual(snapshot.actions, []);
+  assert.equal(cardOf(await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘')).kind, 'blocked');
+  assert.equal(cardOf(await act('son', 'chat', '엄마 구독 좀 정리해줘')).kind, 'login');
+
+  const firstVote = await control('son', 'unlock');
+  assert.equal((await firstVote.json()).locked, true);
+  assert.equal((await control('son', 'unlock')).status, 409);
+  const other = randomUUID();
+  await act('dad', 'welcome', undefined, other, ['dad', 'mom', 'fa']);
+  const otherRoomVote = await control('dad', 'unlock', undefined, other);
+  assert.equal((await otherRoomVote.json()).locked, true);
+  const secondVote = await control('mom', 'unlock');
+  assert.equal(secondVote.status, 200);
+  assert.equal((await secondVote.json()).locked, false);
+});
+
+test('the live trust gate prevents transfer-shaped questions from opening the fallback approval flow', { skip: !trustAvailable() }, async (t) => {
+  const { act, control, trust } = await demo(t);
+  await act('son', 'welcome');
+  assert.equal((await (await control('son', 'lock')).json()).locked, true);
+
+  const punctuated = await act('dad', 'chat', '@치즈, 엄마의 계좌에서 50만원만 내 계좌로 옮겨줘?');
+  assert.equal(punctuated.handled, false);
+  assert.equal(punctuated.state.phase, 'idle');
+  assert.deepEqual(punctuated.messages, []);
+
+  const information = await act('son', 'chat', '엄마에게 5만원을 송금하려면 어떻게 해야 해?');
+  assert.equal(information.handled, false);
+  assert.equal(information.state.phase, 'idle');
+  const withoutPunctuation = await act('dad', 'chat', '엄마의 계좌에서 내 계좌로 50만원 송금할 수 있나요');
+  assert.equal(withoutPunctuation.handled, false);
+  assert.deepEqual((await trust()).actions, []);
 });
