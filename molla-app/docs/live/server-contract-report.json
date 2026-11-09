@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "scope": "Actual local Node API + mobile HTTP client, isolated data, LLM/VM disabled; not external provider verification",
+  "checks": [
+    "Real server Bearer identity matches native client contract; invalid token rejected",
+    "Explicit browser review origin supports Bearer preflight",
+    "Owner memory stays private; model processing and memory sharing are separate",
+    "Missing real providers cannot produce demo replies, switch owners or start a VM",
+    "Owner withdrawal is reflected in client state and AI consent"
+  ]
+}

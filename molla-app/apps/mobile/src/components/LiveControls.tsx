@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Button, Copy, ErrorNotice } from './ui';
 import { RuntimePanel } from './RuntimePanel';
+import { PhoneScreenViewer } from './PhoneScreenViewer';
 import { useLiveCompanion } from '../data/LiveCompanionStore';
 import { useTheme } from '../design/Theme';
 
@@ -18,13 +19,14 @@ export function LiveControls() {
   }
   return <>
     <RuntimePanel runtime={runtime} busy={busy} onRefresh={() => void refresh()} onPhoneAction={action => void phoneAction(action)} />
+    {runtime?.phone.configured && <View style={{ marginTop: 12 }}><PhoneScreenViewer /></View>}
     <ErrorNotice message={error} />
     {!!notice && <Copy accessibilityLiveRegion="polite" variant="caption" style={{ color: colors.success, marginTop: 16 }}>{notice}</Copy>}
     <Copy variant="action" style={styles.heading}>내가 허락하는 도움</Copy>
     <View style={[styles.permissions, { backgroundColor: colors.surface }]}>
       <View style={styles.setting}><View style={styles.settingText}><Copy variant="action">AI와 대화하기</Copy><Copy variant="caption" muted>내 대화와 최근 대화 내용이 연결된 AI 서비스로 전달돼요.</Copy></View><Switch accessibilityLabel="AI 대화 동의" value={runtime?.llm.consented || false} disabled={busy} onValueChange={enabled => void setAIConsent(enabled, runtime?.llm.includeMemories || false)} trackColor={{ true: colors.success }} /></View>
       <View style={styles.setting}><View style={styles.settingText}><Copy variant="action">내 기억을 함께 참고하기</Copy><Copy variant="caption" muted>내가 저장한 기억도 AI에게 전달해 답변에 참고하게 해요.</Copy></View><Switch accessibilityLabel="AI에게 내 기억 전달 동의" value={runtime?.llm.includeMemories || false} disabled={busy || !runtime?.llm.consented} onValueChange={include => void setAIConsent(true, include)} trackColor={{ true: colors.success }} /></View>
-      <View style={styles.setting}><View style={styles.settingText}><Copy variant="action">내 Android 앱 열기</Copy><Copy variant="caption" muted>부탁 내용을 직접 승인한 뒤 내 공간의 앱을 열 수 있어요.</Copy></View><Switch accessibilityLabel="내 Android 앱 열기 허용" value={phoneAllowed} disabled={busy} onValueChange={enabled => void setPhonePermission(enabled)} trackColor={{ true: colors.success }} /></View>
+      <View style={styles.setting}><View style={styles.settingText}><Copy variant="action">내 Android 앱 열기</Copy><Copy variant="caption" muted>부탁을 승인해 내 공간의 앱을 열고, 실행 화면을 확인할 수 있어요.</Copy></View><Switch accessibilityLabel="내 Android 앱 열기 허용" value={phoneAllowed} disabled={busy} onValueChange={enabled => void setPhonePermission(enabled)} trackColor={{ true: colors.success }} /></View>
     </View>
     <Copy variant="action" style={styles.heading}>내 연락처</Copy>
     <Copy variant="caption" muted>안부를 전할 때 이름과 관계를 정확히 확인해요.</Copy>

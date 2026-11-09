@@ -8,6 +8,7 @@ export type RuntimeStatus = {
   limits: { vmMaxMinutes: number; vmPricePerMinuteUsd: number };
 };
 export type VmQuote = { quoteId: string; durationMinutes: number; estimatedMaxUsd: number; expiresAt: string };
+export type PhoneFrame = { dataUrl: string; width: number; height: number; capturedAt: string; refreshAfterMs: number };
 export const isPhoneRunning = (phone: RuntimeStatus['phone'] | undefined) => phone?.state === 'running' || phone?.state === 'ready' || phone?.state === 'active';
 
 export class ApiError extends Error {

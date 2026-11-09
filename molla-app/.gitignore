@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.data/
+.eve/
+test-results/
+.vercel/
+.tools/
+.output/
+.eve-build.log
+*.tsbuildinfo
+demo/mobile/
+demo/recordings/
+live/mobile/
+live/mobile/

@@ -17,7 +17,9 @@ pnpm install --frozen-lockfile
 pnpm start
 ```
 
-앱의 실제 대화·Android 실행에는 별도로 운영하는 인증된 Molla API가 필요합니다. 이 변경은 모바일 클라이언트를 추가하며 서버나 모델 자격증명을 포함하지 않습니다. UI 검증은 합성 데이터를 사용하는 명시적 API fixture로 실행합니다.
+앱의 인증된 Node API, Letsur/Vercel AI 연결, 사용자별 기억·권한·승인, Android 실행 어댑터가 `molla-app/server`에 있습니다. [서버 설치·실행](molla-app/README.md)과 [현재 검증 범위](molla-app/docs/STATUS.md)를 확인하세요. 모델 키·개인 접속 코드·실행 DB는 각 운영 환경에서 설정합니다.
+
+실제 Letsur 및 Vercel 모델의 한국어 응답과 초안 생성은 검증했습니다. Android 화면 확인은 앱에 구현되어 있고 테스트를 통과했지만, 실제 클라우드 VM 실행은 사용자 요청에 따라 시작하지 않았습니다. 일반인의 휴대폰을 설치·동의 없이 인터넷에서 원격 제어하는 기능은 아닙니다.
 
 ## 독립 CLI
 
