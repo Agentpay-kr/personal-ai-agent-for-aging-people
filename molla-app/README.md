@@ -4,7 +4,7 @@
 
 ## 현재 가능한 것
 
-- Letsur `gpt-4.1-mini` 또는 Vercel Gateway 모델로 한국어 대화와 구조화된 작업 초안 생성. 제공자를 자동 전환하지 않는다.
+- Letsur `gpt-6.1-terra`(추론 `medium`) 또는 Vercel Gateway 모델로 한국어 대화와 구조화된 작업 초안 생성. 제공자를 자동 전환하지 않는다.
 - 개인별 기억·연락처·대화 격리, 기억 공유·정정·철회, 주인의 새 동의와 정확한 작업 승인.
 - 배정된 Android에서 허용된 앱 열기와 전경 앱 확인. 문자 작성 화면은 열 수 있으나 전송하지 않는다.
 - 인증된 주인이 실제 Android 캡처를 약 3초 간격으로 확인. 닫기·백그라운드·권한 해제·오류 시 갱신과 표시를 중단한다.
@@ -26,6 +26,8 @@ Copy-Item .env.example .env
 Windows가 아니라면 `node scripts/enable-live.mjs`를 사용한다. 이 명령은 최초 1회 개인 토큰과 토큰 해시를 만들며 다시 실행해도 기존 토큰을 재발급하지 않는다. `.data/owner-access.txt`는 서버 운영자가 소유자에게 개별 전달하는 비공개 파일이다. 새 환경에는 별도 토큰이 생성된다.
 
 편집기로 `.env`에 모델 키를 저장하고 `MOLLA_LLM_ENABLED=1`로 변경한다. Letsur는 `MOLLA_LLM_PROVIDER=letsur`, `LETSUR_API_KEY`, `LETSUR_MODEL`을 사용한다. Vercel은 `MOLLA_LLM_PROVIDER=vercel`, `AI_GATEWAY_API_KEY`, `MOLLA_MODEL`을 사용한다. 키를 앱의 `EXPO_PUBLIC_*` 변수에 넣지 않는다.
+
+Terra의 기본 추론 설정은 `LETSUR_REASONING_EFFORT=medium`이다. [요청 호환성과 실제 검증 기록](docs/live/TERRA-MODEL.md)을 참고한다.
 
 ## 앱 실행과 이 PC에서 검토
 
