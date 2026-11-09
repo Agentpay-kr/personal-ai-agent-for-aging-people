@@ -7,14 +7,18 @@ import { createTrustGate, isMoneyRequest, TRUST_ACTIONS } from './trust-gate.mjs
 // account owner + one family co-signer, requester and beneficiary excluded.
 import { evaluate, canVote, approvalState } from '../fa-engine/src/policy.js';
 import { seedFamily, polish } from '../fa-engine/src/family.js';
+import { catalogPrice } from '../fa-engine/src/vm.js';
 
 const LABEL = { mom: '엄마', dad: '아빠', son: '아들' };
 // Korean particles: 받침 decides 이/가 and 와/과.
 const hasBatchim = (word) => { const c = word.charCodeAt(word.length - 1) - 0xac00; return c >= 0 && c <= 11171 && c % 28 !== 0; };
 const subj = (word) => word + (hasBatchim(word) ? '이' : '가');
+const obj = (word) => word + (hasBatchim(word) ? '을' : '를');
 const andJoin = (words) => words.reduce((acc, w, i) => (i === 0 ? w : acc + (hasBatchim(words[i - 1]) ? '과 ' : '와 ') + w), '');
 const MEMBERS = new Set([...Object.keys(LABEL), 'aunt', 'friend', 'fa']);
-const ACTIONS = new Set(['welcome', 'chat', 'setup', 'login', 'scope', 'deny', 'scan', 'propose', 'approve', 'cosign', 'retire', ...TRUST_ACTIONS]);
+const ACTIONS = new Set(['welcome', 'chat', 'setup', 'login', 'scope', 'deny', 'scan', 'propose', 'approve', 'cosign', 'retire',
+  'route_approve', 'route_deny', ...TRUST_ACTIONS]);
+const SERVICES = { coupang: '쿠팡', email: '이메일' };
 const FAMILY = (() => {
   const family = seedFamily();
   family.members.son.name = LABEL.son; // this demo calls the son "아들"
@@ -22,7 +26,8 @@ const FAMILY = (() => {
 })();
 const policy = (requester, owner, action, input) => {
   const decision = evaluate(FAMILY, { requester, owner, action, input });
-  return { ...decision, reason: polish(decision.reason) };
+  // The demo calls the son "아들"; drop the honorific (아들님이 -> 아들이, particles already fit).
+  return { ...decision, reason: polish(decision.reason).replace(/아들님/g, '아들') };
 };
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
 const FIELDS = new Set(['demo_id', 'room_id', 'members', 'actor', 'action', 'value', 'step_id', 'approval_id']);
@@ -76,6 +81,20 @@ function intent(text, actor) {
   if (/^(?:구독 (?:목록 보기|읽기)를? )?허용\s*(?:해요|할게요?|합니다|하겠습니다)[.!。！]?$/.test(query)) return { action: 'scope' };
   if (/^(?:거절|안 할래|안할래|허용 안 함|승인 안 함|해지하지 마|구독 유지할게요)[.!。！]?$/.test(query)) return { action: 'deny' };
   if (/[?？]|방법|어떻게|뭐야|무슨 뜻|할 수 있|라고|따옴표|하지\s*마|취소하지|해지 안/.test(query)) return null;
+
+  // Routing scenes from the team diagram: whose VM does this request run in?
+  const self = /(?:^|\s)(?:내|제|나의)\s/.test(query) || /^(?:내|제)\s/.test(query);
+  const named = whoIs(query.match(/엄마|어머니|아빠|아버지|아들/)?.[0] ?? '');
+  const routeOwner = self ? actor : (named ?? actor);
+  const service = /쿠팡/.test(query) ? 'coupang' : /이메일|메일|지메일|gmail/i.test(query) ? 'email' : null;
+  if (service && /(연동|연결|로그인)/.test(query)) {
+    return { action: 'connect', route: { kind: 'connect', owner: routeOwner, service } };
+  }
+  if (/(주문|시켜|사\s*줘|사다\s*줘)/.test(query) && /(쌀|휴지|화장지|생수|라면)/.test(query)) {
+    const item = /쌀/.test(query) ? `쌀 ${query.match(/(\d+)\s*(?:kg|킬로)/i)?.[1] ?? 10}kg`
+      : /휴지|화장지/.test(query) ? '화장지 30롤' : /생수/.test(query) ? '생수 2L 12병' : '라면 5개입';
+    return { action: 'order', route: { kind: 'order', owner: routeOwner, item, price: catalogPrice(item) ?? 15_000 } };
+  }
 
   const services = DEMO_SUBSCRIPTIONS.filter(({ match }) => match.test(query));
   const owners = new Set();
@@ -298,6 +317,114 @@ function decideTransfer(room, actor, vote, id) {
   });
 }
 
+// ---- Routing scenes: the FA routes each request to the right person's VM by rule.
+// Cards show who asked, which VM runs it, and the rule that decided (fa-engine policy).
+
+function routeRows(task, reason) {
+  return [
+    row('요청한 사람', LABEL[task.actor]),
+    row('라우팅', `${LABEL[task.actor]} → FA → ${space(task.owner)}`),
+    row('규칙 판정', reason),
+  ];
+}
+
+function finishRoute(room, prevFlow, text, card) {
+  room.flow = prevFlow; // back to whatever the room was doing before this scene
+  return reply(room, text, card);
+}
+
+function askConnect(room, task, prevFlow, reason) {
+  transition(room, 'routing', task.owner, { task, prevFlow, stage: 'connect' });
+  const who = LABEL[task.owner];
+  const svc = SERVICES[task.service];
+  const text = task.actor === task.owner
+    ? `${who} ${svc} 연결을 시작할게요. ${who} 화면에서 직접 로그인해 주세요.`
+    : `${who}, ${subj(LABEL[task.actor])} ${who} ${svc} 연결을 시작했어요. 로그인은 ${who}만 할 수 있어요.`;
+  return reply(room, text, {
+    kind: 'login', audience: task.owner, title: `${who} ${svc} 연결`,
+    description: `${who} ${svc} 로그인은 ${space(task.owner)} 안에서 이뤄져요.`,
+    rows: [...routeRows(task, reason), row('입력하는 사람', `${who}만`)],
+    actions: [button('login', `${who} ${svc} 로그인`, { actor: task.owner })],
+  });
+}
+
+function completeOrder(room, task, prevFlow, lead) {
+  const who = LABEL[task.owner];
+  if (!room.accounts.has(`${task.owner}:coupang`)) {
+    return askConnect(room, { ...task, kind: 'connect', service: 'coupang', then: task }, prevFlow,
+      `주문하려면 ${who} 쿠팡이 ${space(task.owner)}에 연결돼 있어야 해요.`);
+  }
+  return finishRoute(room, prevFlow, `${lead ?? ''}${space(task.owner)}에서 ${who} 쿠팡으로 ${task.item} 주문을 준비했어요.`, {
+    kind: 'result', title: `${task.item} 주문 준비 완료`,
+    description: '데모라서 실제 결제는 하지 않았어요.',
+    rows: [
+      row('요청한 사람', LABEL[task.actor]), row('실행 VM', space(task.owner)),
+      row('쿠팡 계정', `${who}의 쿠팡`), row('배송지', `${who} 집 (등록된 주소)`), row('금액', won(task.price)),
+    ],
+  });
+}
+
+function proposeRoute(room, actor, route) {
+  const task = { id: randomUUID(), actor, ...route };
+  const who = LABEL[task.owner];
+  if (!room.members.includes(task.owner)) return reply(room, `먼저 채팅방에서 ${obj(who)} 초대해 주세요.`);
+  const prevFlow = room.flow.phase === 'routing' ? room.flow.prevFlow : room.flow;
+  const d = task.kind === 'order'
+    ? policy(actor, task.owner, 'order_item', { item: task.item, price: task.price })
+    : policy(actor, task.owner, 'connect_account', { service: task.service });
+
+  if (d.decision === 'deny') {
+    return reply(room, `🔒 ${d.reason}`, {
+      kind: 'blocked', title: `${who} 계정에서는 할 수 없는 요청이에요`, description: d.reason, rows: routeRows(task, '차단'),
+    });
+  }
+  if (task.kind === 'connect') return askConnect(room, task, prevFlow, d.reason);
+  if (d.decision === 'needs_approval') {
+    transition(room, 'routing', task.owner, { task, prevFlow, stage: 'approve' });
+    return reply(room, `${who}, ${subj(LABEL[actor])} ${who} 계정으로 ${task.item} 주문을 부탁했어요.`, {
+      kind: 'approval', audience: task.owner, title: `${task.item} 주문 확인`,
+      description: `${who} 계정과 ${who} 주소로 주문해요. ${subj(who)} 확인해야 진행돼요.`,
+      rows: [...routeRows(task, d.reason), row('금액', won(task.price))],
+      actions: [
+        button('route_approve', '주문하기', { value: task.id, actor: task.owner }),
+        button('route_deny', '주문 안 함', { value: task.id, actor: task.owner, variant: 'secondary' }),
+      ],
+    });
+  }
+  return completeOrder(room, task, prevFlow);
+}
+
+// Returns a reply when this action belongs to the routing scene in progress, else null.
+function continueRoute(room, { actor, action, value, step_id, fromChat }) {
+  const { task, prevFlow, stage } = room.flow;
+  const mine = (stage === 'connect' && action === 'login')
+    || (stage === 'approve' && ['route_approve', 'route_deny', 'approve', 'deny'].includes(action));
+  if (!mine) {
+    room.flow = prevFlow; // anything else leaves the routing scene
+    return null;
+  }
+  if (!fromChat && step_id !== room.flow.step_id) return reply(room, '이 요청은 바뀌었거나 끝났어요. 최근 FA 카드를 확인해 주세요.');
+  const who = LABEL[task.owner];
+  if (actor !== task.owner) return reply(room, `${subj(who)} 직접 해야 해요. 가족도 대신할 수 없어요.`);
+
+  if (stage === 'connect') {
+    if (value !== `${task.owner}-demo`) return reply(room, `${who}의 샘플 계정을 선택해 주세요.`);
+    room.accounts.add(`${task.owner}:${task.service}`);
+    const svc = SERVICES[task.service];
+    if (task.then) return completeOrder(room, task.then, prevFlow, `${who} 쿠팡이 연결돼서 바로 이어서 `);
+    return finishRoute(room, prevFlow, `${who} ${subj(svc)} ${space(task.owner)}에 연결됐어요.`, {
+      kind: 'result', title: `${who} ${svc} 연결 완료`,
+      description: `비밀번호는 ${space(task.owner)} 금고에만 있어요. 가족에게도 보이지 않아요.`,
+      rows: [row('요청한 사람', LABEL[task.actor]), row('연결된 VM', space(task.owner)), row('로그인한 사람', who)],
+    });
+  }
+  if (action === 'route_deny' || action === 'deny') {
+    return finishRoute(room, prevFlow, `${subj(who)} ${task.item} 주문을 하지 않기로 했어요.`);
+  }
+  if (!fromChat && value !== task.id) return reply(room, '가장 최근 주문 요청에서 다시 확인해 주세요.');
+  return completeOrder(room, task, prevFlow);
+}
+
 function readList(room, vm, actor, owner, grant) {
   const gate = policy(actor, owner, 'scan_subscriptions');
   if (gate.decision === 'deny') return reply(room, gate.reason);
@@ -310,12 +437,18 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
   const fromChat = action === 'chat';
   let ownerHint;
   let transfer;
+  let route;
   if (fromChat) {
     const candidate = intent(value, actor);
     if (!candidate) return reply(room);
-    ({ action, value, owner: ownerHint, transfer } = candidate);
+    ({ action, value, owner: ownerHint, transfer, route } = candidate);
   }
   if (action === 'welcome') return welcome(room);
+  if (route) return proposeRoute(room, actor, route);
+  if (room.flow.phase === 'routing') {
+    const routed = continueRoute(room, { actor, action, value, step_id, fromChat });
+    if (routed) return routed;
+  }
   if (TRUST_ACTIONS.has(action)) return reply(room, '보안 기능(fa-trust)이 연결되지 않았어요.');
   // Reached only when fa-trust didn't take the money request (e.g. fa-trust isn't available).
   if (action === 'transfer') return proposeTransfer(room, actor, transfer);
@@ -469,7 +602,7 @@ export function createRouter({ trust: useTrust = true } = {}) {
       const { vm, rooms, trust } = demoOf(demo_id);
       const signature = members.toSorted().join(',');
       if (!rooms.has(room_id)) {
-        const room = { members, signature, connections: new Map() };
+        const room = { members, signature, connections: new Map(), accounts: new Set() };
         transition(room, 'idle');
         rooms.set(room_id, room);
       }
