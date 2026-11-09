@@ -47,7 +47,7 @@ async function connect(room, owner = 'mom') {
 
 test('the requester can read an owner VM only after owner consent and cannot approve for the owner', async (t) => {
   const room = (await demo(t))();
-  const setup = await room.act('son', 'chat', '엄마 구독 좀 정리해줘');
+  const setup = await room.act('son', 'chat', '@FA 엄마 구독 좀 정리해줘');
   assert.equal(setup.card.audience, 'mom');
   assert.equal((await room.act('son', 'login', 'mom-demo')).state.phase, 'awaiting-login');
   assert.equal((await room.act('mom', 'login', 'dad-demo')).state.phase, 'awaiting-login');
@@ -82,8 +82,8 @@ test('the same service requires a fresh exact owner approval after denial', asyn
   assert.equal((await room.act('mom', 'approve', first.card.actions[0].value)).state.phase, 'awaiting-approval');
   assert.equal((await room.act('mom', 'approve', next.card.actions[0].value, { step_id: first.state.step_id })).state.phase, 'awaiting-approval');
   assert.equal((await room.act('mom', 'chat', '승인할게라고 답하면 돼?')).handled, false);
-  assert.equal((await room.act('mom', 'chat', '해지 승인할게요.')).state.phase, 'awaiting-approval');
-  assert.equal((await room.act('mom', 'chat', '해지 승인할게요.', { approval_id: next.card.actions[0].value })).state.phase, 'complete');
+  assert.equal((await room.act('mom', 'chat', '@치즈, 해지 승인할게요.')).state.phase, 'awaiting-approval');
+  assert.equal((await room.act('mom', 'chat', '@치즈, 해지 승인할게요.', { approval_id: next.card.actions[0].value })).state.phase, 'complete');
 });
 
 test('ambiguous or unsupported requests cannot silently route to an existing owner', async (t) => {

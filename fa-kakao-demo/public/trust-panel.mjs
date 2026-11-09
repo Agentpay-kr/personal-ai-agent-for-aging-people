@@ -62,7 +62,7 @@ document.addEventListener('click', (event) => {
   if (!(target instanceof Element)) return;
   if (target.closest('.trust-sheet-root')) return;
   const fromDrawer = target.closest('.drawer-bot');
-  const message = target.closest('article.message.theirs[aria-label^="FA의"]');
+  const message = target.closest('article.message.theirs[data-sender="fa"]');
   if (!fromDrawer && !message) return;
   if (message && (target.closest('.fa-card') || target.closest('button, a, input, select, textarea'))) return;
   event.preventDefault();
@@ -111,7 +111,7 @@ function render(force = false) {
   lastKey = key;
   if (snap && snap.enabled === false) {
     sheet.innerHTML = `<div class="trust-backdrop"></div><section class="trust-sheet" role="dialog" aria-label="신뢰 패널">
-      <header><strong>🛡️ FA 신뢰 패널</strong><button type="button" class="trust-close" aria-label="닫기">✕</button></header>
+      <header><strong>🛡️ 치즈 신뢰 패널</strong><button type="button" class="trust-close" aria-label="닫기">✕</button></header>
       <p class="trust-off">보안 코어(fa-trust)가 연결되지 않았어요.</p></section>`;
     bind();
     return;
@@ -120,7 +120,7 @@ function render(force = false) {
   const recent = events.filter((e) => HEADLINE.has(e.type)).slice(-3).reverse();
   sheet.innerHTML = `<div class="trust-backdrop"></div>
     <section class="trust-sheet" role="dialog" aria-label="신뢰 패널">
-      <header><strong>🛡️ FA 신뢰 패널</strong><button type="button" class="trust-close" aria-label="닫기">✕</button></header>
+      <header><strong>🛡️ 치즈 신뢰 패널</strong><button type="button" class="trust-close" aria-label="닫기">✕</button></header>
       <div class="trust-status ${tone}"><strong>${esc(title)}</strong><p>${esc(sub)}</p></div>
       <div class="trust-facts">${facts()}</div>
       <h3>최근 보안 기록</h3>

@@ -1,3 +1,5 @@
+import { stripFaMention } from './public/mentions.mjs';
+
 // Security scenes for the KakaoTalk demo, backed by fa-trust (../fa-trust).
 // Money requests in the chat go through fa-trust instead of a flat "blocked" reply:
 //   - transfers need the account owner's device-proven approval (2-of-3) and are public to the family,
@@ -19,7 +21,7 @@ try {
 export const trustAvailable = () => Boolean(FamilyTrust);
 
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
-const strip = (text) => String(text ?? '').trim().replace(/^@FA\s*/i, '');
+
 const WHO = [[/엄마|어머니/, 'mom'], [/아빠|아버지/, 'dad'], [/아들/, 'son']];
 const idOf = (word) => WHO.find(([re]) => re.test(word))?.[1];
 
@@ -30,13 +32,13 @@ function amountIn(text) {
 }
 
 export function isMoneyRequest(text) {
-  const t = strip(text);
+  const t = stripFaMention(text);
   if (/[?？]|어떻게|방법|뭐야/.test(t)) return false;
   return Boolean(amountIn(t)) && /송금|이체|안전\s*계좌|계좌|옮겨|옮기|보내/.test(t);
 }
 
 function parseTransfer(text, actor) {
-  const t = strip(text);
+  const t = stripFaMention(text);
   const from = t.match(/(엄마|어머니|아빠|아버지|아들)\s*(?:의)?\s*(?:통장|계좌)에서/);
   const owner = from ? idOf(from[1]) : actor;
   let payee = '처음 보는 계좌';
@@ -235,7 +237,7 @@ export function createTrustGate() {
       await ready;
       const t = parseTransfer(text, actor);
       if (!room.members.includes(t.owner)) return [note(room, `${LABEL[t.owner]}가 이 방에 없어서 승인 요청을 보낼 수 없어요.`)];
-      const req = { owner: t.owner, kind: 'transfer', service: 'bank', amountKRW: t.amountKRW, payee: t.payee, payeeOwner: t.payeeOwner, summary: t.summary, text: strip(text) };
+      const req = { owner: t.owner, kind: 'transfer', service: 'bank', amountKRW: t.amountKRW, payee: t.payee, payeeOwner: t.payeeOwner, summary: t.summary, text: stripFaMention(text) };
       // Unregistered phones (guests) go in without a device proof and are blocked by fa-trust.
       const a = phones[actor] ? await trust.request(phones[actor], req) : await trust.submit({ ...req, requester: actor });
       return [view(room, a)];
