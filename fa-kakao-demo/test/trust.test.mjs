@@ -94,7 +94,7 @@ test('voice phishing (fraud) is held, evidence sealed, scam report locks down', 
   // Two family devices unlock it again.
   await act('son', 'trust_unlock', 'unlock');
   const unlocked = await act('dad', 'trust_unlock', 'unlock');
-  assert.match(unlocked.messages[0].text, /잠금을 풀고/);
+  assert.match(unlocked.messages[0].text, /잠금을 풀었어요/);
 });
 
 test('impostor approval (takeover) self-destructs FA; sealed evidence remains', { skip: !trustAvailable() }, async (t) => {

@@ -253,7 +253,7 @@ function renderCard(card, item, index) {
   const locked = !isCurrentCard(card, item.flow);
   const rows = card.rows?.length ? `<dl>${card.rows.map(row => `<div><dt>${esc(row.label)}</dt><dd>${esc(row.detail)}</dd></div>`).join('')}</dl>` : '';
   const requiresOwner = card.audience && state.actor !== card.audience;
-  const cardLabels = {welcome:['bot','치즈와 시작하기'],login:['lock','계정 연결 요청'],scope:['shield','권한 요청'],ready:['shield','연결 완료'],subscriptions:['list','구독 조회 결과'],approval:['shield','승인 요청'],result:['check','작업 완료'],blocked:['lock','권한 확인']};
+  const cardLabels = {welcome:['bot','치즈와 시작하기'],login:['lock','계정 연결 요청'],scope:['shield','허락 요청'],ready:['shield','연결 완료'],subscriptions:['list','구독 목록'],approval:['shield','승인 요청'],result:['check','작업 완료'],blocked:['lock','권한 확인']};
   const [symbol, title] = cardLabels[card.kind] || ['info','Family AI Agent'];
   return `<section class="fa-card card-${esc(card.kind)}"><div class="card-body">
     <div class="card-kicker">${icon(symbol,15)} ${title}${card.audience ? `<span class="card-audience">${esc(label(card.audience))} 전용</span>` : ''}</div>
@@ -263,7 +263,7 @@ function renderCard(card, item, index) {
         || (action.actors && !action.actors.includes(state.actor));
       return actionButton(action.label, 'router', action.variant === 'secondary' ? 'secondary' : 'primary',
         `data-index="${index}" data-step="${esc(action.action)}" data-value="${esc(action.value)}" data-step-id="${esc(card.step_id)}" ${lockedForActor || pending.has(item.id) ? 'disabled' : ''}`);
-    }).join('')}${!locked && requiresOwner ? '<span class="card-status">계정 주인이 본인 화면에서 확인할 수 있어요.</span>' : ''}</div>` : ''}</section>`;
+    }).join('')}${!locked && requiresOwner ? '<span class="card-status">본인 화면에서만 누를 수 있어요.</span>' : ''}</div>` : ''}</section>`;
 }
 
 function messageHTML(message, item, index) {
@@ -814,7 +814,7 @@ function renderDialog() {
         <div class="input-context">${icon('lock',19)} ${owner} 전용 입력</div>
         <p>발표에 사용할 샘플 계정을 선택해 주세요. 선택 내용은 채팅방에 표시되지 않아요.</p>
         <label>데모 계정<select name="sample" class="form-field" required><option value="">계정을 선택해 주세요</option><option value="${esc(modal.owner)}-demo">${owner}의 샘플 계정</option></select></label>
-        <p class="field-note">이 계정으로 ${owner}의 VM 연결 과정을 시연해요.</p></div>${dialogActions('데모 계정 연결')}`;
+        <p class="field-note">이 계정으로 ${owner} 전용 컴퓨터를 연결하는 과정을 보여드려요.</p></div>${dialogActions('데모 계정 연결')}`;
       break;
     }
     case 'input':
