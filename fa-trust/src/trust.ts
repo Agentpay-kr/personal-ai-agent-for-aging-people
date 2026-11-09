@@ -27,6 +27,7 @@ import {
   type JudgeVerdict,
   type RouterContext,
 } from './judge';
+import { intrusionKinds, intrusionsFrom, type Intrusion } from './intrusion';
 import {
   DEFAULT_POLICY,
   evaluate,
@@ -114,6 +115,12 @@ export interface FamilyTrustOptions {
   judge?: Judge;
   /** Judge timeout in ms. On timeout or error, anything with side effects is held (fail closed). Default 12000. */
   judgeTimeoutMs?: number;
+  /**
+   * Forged approvals on one request before FA self-destructs. Default 1: the first forged approval
+   * is treated as takeover. Raise it if you'd rather hold first (forged approvals can then be used to
+   * force a re-link, which costs the family a re-login but never moves money).
+   */
+  impostorStrikeLimit?: number;
 }
 
 export const FA_SERVER = 'fa_server';
@@ -161,8 +168,11 @@ export class FamilyTrust {
   #listeners: Array<(e: TrustEvent) => void> = [];
   #frozen = false;
   #lockCount = 0;
-  /** Forged approvals seen per request. The 2nd one on the same request triggers a lockdown. */
+  /** Forged approvals seen per request. Reaching `impostorStrikeLimit` triggers self-destruct. */
   readonly #impostorStrikes = new Map<string, number>();
+  readonly #impostorStrikeLimit: number;
+  /** Tampered audit entries already answered by a self-destruct. Any other broken entry triggers a new one. */
+  readonly #knownAuditBreaks = new Set<number>();
 
   constructor(opts: FamilyTrustOptions) {
     if (opts.members.length < 2) throw new Error('a family needs at least 2 members');
@@ -172,6 +182,7 @@ export class FamilyTrust {
     this.#executor = opts.executor ?? ((req) => `${req.summary ?? req.kind} 완료`);
     this.#judge = opts.judge;
     this.#judgeTimeoutMs = opts.judgeTimeoutMs ?? 12_000;
+    this.#impostorStrikeLimit = Math.max(1, Math.floor(opts.impostorStrikeLimit ?? 1));
     this.vault = new ShredVault(this.#now);
     this.audit = new AuditLog(this.#now);
     for (const m of opts.members) this.#members.set(m.id, m);
@@ -322,6 +333,31 @@ export class FamilyTrust {
       judged = { ...verdict, effect: combined.effect };
     }
 
+    // Intrusion (takeover, hacking, contamination) is not fraud against the parent: the system itself
+    // may be compromised, so FA refuses this request and then self-destructs (see intrusion.ts).
+    const intrusions = this.#frozen
+      ? []
+      : intrusionsFrom([
+          ...(isMember ? [] : ['not_family']),
+          ...(isMember && auth.proof !== undefined && !verified ? ['unverified_device'] : []),
+          ...decision.signals.map((s) => s.id),
+          ...(judged?.signals ?? []),
+          ...(this.#auditIntact() ? [] : ['audit_tampered']),
+        ]);
+    if (intrusions.length > 0) {
+      decision = {
+        ...decision,
+        tier: 'T3',
+        outcome: 'block',
+        notifyFamily: true,
+        sealEvidence: true,
+        reasons: [
+          `💥 외부 침해(${intrusionKinds(intrusions)}) 의심이라 실행하지 않고 FA를 소멸시켜요.`,
+          ...intrusions.map((i) => `• ${i.label}`),
+        ],
+      };
+    }
+
     // Transfers: the beneficiary and a non-owner requester never count as approvers.
     // Runs after the judge so it checks the final approval count: if a judge hold asks for more
     // approvers than are eligible, the request is blocked outright instead of waiting forever.
@@ -378,7 +414,8 @@ export class FamilyTrust {
         decision.outcome === 'hold' ? '사기 의심으로 보류' : decision.outcome === 'block' ? '차단' : '가족 확인 필요';
       this.#emit('family_alert', `👨‍👩‍👦 가족 전체 알림: ${this.name(request.requester)} 요청 "${what}" → ${state}`, id);
     }
-    if (decision.sealEvidence) action.evidenceId = await this.#sealEvidence(action);
+    if (decision.sealEvidence) action.evidenceId = await this.#sealEvidence(action, intrusions);
+    if (intrusions.length > 0) await this.#selfDestruct(intrusions);
     await this.#progress(action);
     return action;
   }
@@ -441,7 +478,9 @@ export class FamilyTrust {
   ): Promise<PendingAction> {
     const a = this.#get(requestId);
     if (!this.verifyProof(memberId, proof, this.context(memberId, 'reject', requestId))) {
+      this.audit.append('proof_failed', memberId, '거절 기기 증명 실패', { requestId });
       this.#emit('proof_failed', '⚠️ 등록된 기기가 아닌 곳에서 온 거절이라 무시했어요.', requestId);
+      await this.#onImpostor(a, memberId);
       return a;
     }
     if (OPEN.includes(a.status)) a.status = 'rejected';
@@ -465,6 +504,7 @@ export class FamilyTrust {
 
   /** Runs scheduled actions that are due and expires linked sessions past their TTL. Call on a timer. */
   async tick(): Promise<void> {
+    if (!this.#frozen && !this.#auditIntact()) await this.#selfDestruct(intrusionsFrom(['audit_tampered']));
     this.vault.sweep();
     for (const [slot, link] of [...this.#links]) {
       if (this.vault.info(link.sessionRecord)?.shredded) {
@@ -562,13 +602,71 @@ export class FamilyTrust {
 
   // ───────────────────────── lockdown ─────────────────────────
 
-  /** Anyone can lock. Unlocking takes 2 different family phones. */
+  /**
+   * Fraud response: anyone can lock (e.g. the son flags a scam). Sessions are revoked, family memory
+   * is kept. Unlocking takes 2 different family phones.
+   */
   async lockdown(by: MemberId, reason: string): Promise<void> {
     if (this.#frozen) return;
+    const { slots, cancelled } = await this.#revokeAll('lockdown', by, reason);
+    this.#emit(
+      'lockdown',
+      [
+        `🔒 긴급 잠금 (${this.name(by)})`,
+        `• 연결된 서비스 ${slots}개의 세션과 열쇠 조각 소멸 → 에이전트가 더는 어떤 계정도 못 열어요`,
+        `• 진행 중이던 요청 ${cancelled}건 취소`,
+        `• 가족 키 재발급 (epoch ${this.keys.epoch})`,
+        '• 해제는 가족 2명의 기기 증명이 있어야 해요',
+      ].join('\n'),
+    );
+  }
+
+  /**
+   * Intrusion response: everything the agent could use or leak is destroyed (sessions, key shares,
+   * in-flight requests, task data, family memory). Sealed evidence and the audit chain stay.
+   */
+  async #selfDestruct(intrusions: Intrusion[], cause?: PendingAction): Promise<void> {
+    if (this.#frozen || intrusions.length === 0) return;
+    if (cause) {
+      const evidenceId = await this.#sealEvidence(cause, intrusions);
+      cause.evidenceId ??= evidenceId;
+    }
+    const memories = this.#memory.length;
+    this.#memory.splice(0);
+    const taskRecords = this.vault.shredWhere((r) => r.tags.some((t) => t.startsWith('task:')), 'self_destruct').length;
+    const { slots, cancelled } = await this.#revokeAll(
+      'self_destruct',
+      'fa_agent',
+      `외부 침해: ${intrusions.map((i) => i.id).join(', ')}`,
+      { memories, taskRecords },
+    );
+    for (const seq of this.audit.brokenEntries()) this.#knownAuditBreaks.add(seq);
+    this.#emit(
+      'self_destruct',
+      [
+        `💥 외부 침해(${intrusionKinds(intrusions)}) 감지 → FA 자동 소멸`,
+        ...intrusions.map((i) => `• 원인: ${i.label}`),
+        `• 연결된 서비스 ${slots}개의 세션과 열쇠 조각 소멸 → 에이전트가 어떤 계정도 열 수 없어요`,
+        `• 진행 중이던 요청 ${cancelled}건, 작업 데이터 ${taskRecords}건 소멸`,
+        `• 가족 기억 ${memories}건 소멸 (오염됐을 수 있어서 남기지 않아요)`,
+        `• 가족 키 재발급 (epoch ${this.keys.epoch})`,
+        '• 남은 것: 봉인된 증거와 감사 기록뿐이에요. 다시 쓰려면 가족 2명이 기기로 확인하고 서비스를 새로 연결해야 해요.',
+      ].join('\n'),
+      cause?.id,
+    );
+  }
+
+  /** Shared by lockdown and self-destruct: revoke every session, cancel open work, re-key, freeze. */
+  async #revokeAll(
+    type: string,
+    actor: string,
+    reason: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<{ slots: number; cancelled: number }> {
     this.#frozen = true;
     this.#lockCount++;
     const slots = [...this.#links.keys()];
-    this.vault.shredWhere((r) => r.tags.includes('session') || r.tags.includes('server_share'), 'lockdown');
+    this.vault.shredWhere((r) => r.tags.includes('session') || r.tags.includes('server_share'), type);
     for (const d of this.#devices.values()) for (const s of slots) d.dropShare(s);
     this.#links.clear();
     let cancelled = 0;
@@ -582,17 +680,12 @@ export class FamilyTrust {
     const oldKey = this.keys.familyKey();
     this.keys.rekey();
     await this.#reencryptMemory(oldKey);
-    this.audit.append('lockdown', by, reason, { sessionsShredded: slots.length, cancelled, epoch: this.keys.epoch });
-    this.#emit(
-      'lockdown',
-      [
-        `🔒 긴급 잠금 (${this.name(by)})`,
-        `• 연결된 서비스 ${slots.length}개의 세션과 열쇠 조각 소멸 → 에이전트가 더는 어떤 계정도 못 열어요`,
-        `• 진행 중이던 요청 ${cancelled}건 취소`,
-        `• 가족 키 재발급 (epoch ${this.keys.epoch})`,
-        '• 해제는 가족 2명의 기기 증명이 있어야 해요',
-      ].join('\n'),
-    );
+    this.audit.append(type, actor, reason, { sessionsShredded: slots.length, cancelled, epoch: this.keys.epoch, ...extra });
+    return { slots: slots.length, cancelled };
+  }
+
+  #auditIntact(): boolean {
+    return this.audit.brokenEntries().every((seq) => this.#knownAuditBreaks.has(seq));
   }
 
   async unlock(approvals: Array<{ memberId: MemberId; proof: ZkProof }>): Promise<boolean> {
@@ -790,20 +883,21 @@ export class FamilyTrust {
     return [...this.#members.keys()].filter((m) => !this.#approverExclusion(req, m));
   }
 
-  // Someone tried to approve as a family member without that member's device.
-  // 1st time: hold the request, demand one more family device, alert everyone, seal evidence.
-  // 2nd time on the same request: emergency lockdown. (Not on the 1st, so forged
-  // approvals alone can't be used to wipe the family's connections.)
+  // Someone approved or rejected as a family member without that member's device: takeover.
+  // At `impostorStrikeLimit` forged attempts on one request (default 1) FA self-destructs.
+  // With a higher limit, earlier attempts hold the request, ask for one more family device,
+  // alert everyone and seal evidence.
   async #onImpostor(a: PendingAction, claimed: MemberId): Promise<void> {
-    if (!OPEN.includes(a.status)) return;
+    if (this.#frozen) return;
     const strikes = (this.#impostorStrikes.get(a.id) ?? 0) + 1;
     this.#impostorStrikes.set(a.id, strikes);
     this.audit.append('impostor', claimed, `사칭 승인 시도 ${strikes}회`, { requestId: a.id });
 
-    if (strikes >= 2) {
-      await this.lockdown('FA 자동 감지', `같은 요청에 "${this.name(claimed)}" 사칭 승인 ${strikes}회`);
+    if (strikes >= this.#impostorStrikeLimit) {
+      await this.#selfDestruct(intrusionsFrom(['impostor_approval']), a);
       return;
     }
+    if (!OPEN.includes(a.status)) return;
 
     const wasScheduled = a.status === 'scheduled';
     a.status = 'held';
@@ -817,13 +911,13 @@ export class FamilyTrust {
     this.#emit(
       'family_alert',
       `👨‍👩‍👦 가족 전체 알림: "${this.name(claimed)}" 사칭 승인 시도 감지 → "${a.request.summary ?? a.request.kind}" 보류` +
-        `${wasScheduled ? ' (예약 실행 취소)' : ''}. 이제 가족 ${a.decision.approvalsRequired}명의 기기 확인이 필요해요. 한 번 더 시도되면 긴급 잠금해요.`,
+        `${wasScheduled ? ' (예약 실행 취소)' : ''}. 이제 가족 ${a.decision.approvalsRequired}명의 기기 확인이 필요해요. 더 시도되면 FA를 자동 소멸시켜요.`,
       a.id,
     );
     if (!a.evidenceId) a.evidenceId = await this.#sealEvidence(a);
   }
 
-  async #sealEvidence(a: PendingAction): Promise<string> {
+  async #sealEvidence(a: PendingAction, intrusions: Intrusion[] = []): Promise<string> {
     const holders = [...this.#members.keys()];
     const ev = await sealEvidence(
       {
@@ -837,9 +931,10 @@ export class FamilyTrust {
         text: a.request.text,
         context: a.request.context,
         signals: a.decision.signals,
+        intrusions: intrusions.map(({ id, kind }) => ({ id, kind })),
         at: this.#now(),
       },
-      { holders, threshold: 2, reason: a.decision.outcome, now: this.#now() },
+      { holders, threshold: 2, reason: intrusions.length > 0 ? 'intrusion' : a.decision.outcome, now: this.#now() },
     );
     for (const share of ev.shares) if (share.holder) this.#deliverShare(share.holder, evidenceSlot(ev.id), share, false);
     this.#evidence.set(ev.id, { ...ev, shares: [] });
