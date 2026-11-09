@@ -1,0 +1,16 @@
+{
+  "surface": "React Native Web / Edge mobile viewport (not a native simulator)",
+  "screenshots": "C:\\Users\\user\\Downloads\\molla ai\\molla-app\\docs\\design\\screenshots",
+  "passed": true,
+  "failures": [],
+  "checks": [
+    "home → conversation",
+    "send → manual review → local draft",
+    "no external execution claim",
+    "persistent demo conversation",
+    "dark theme",
+    "360/375/390 phone, landscape, tablet",
+    "long multiline draft",
+    "reduced motion enabled"
+  ]
+}

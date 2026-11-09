@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "surface": "React Native Web; mocked authenticated API contract; NOT a live model or VM proof",
+  "failures": [],
+  "checks": [
+    "No anonymous identity; invalid bearer rejected",
+    "Demo server is rejected instead of appearing live",
+    "AI consent is explicit and separate from memory consent",
+    "Exact action review precedes approval; completion comes from refreshed state",
+    "VM quote is reviewed before one explicit start; stop is owner scoped",
+    "AI failures preserve text and retry UUID; no scripted reply",
+    "Account disconnect clears conversation, request IDs and unsent drafts",
+    "Mobile layouts have no horizontal overflow"
+  ]
+}

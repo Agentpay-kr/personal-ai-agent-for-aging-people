@@ -1,0 +1,316 @@
+{
+  "passed": true,
+  "failures": [],
+  "contrasts": [
+    {
+      "theme": "light",
+      "foreground": "ink",
+      "background": "canvas",
+      "ratio": 12.9,
+      "passes": true
+    },
+    {
+      "theme": "light",
+      "foreground": "muted",
+      "background": "canvas",
+      "ratio": 5.1,
+      "passes": true
+    },
+    {
+      "theme": "light",
+      "foreground": "ink",
+      "background": "surface",
+      "ratio": 13.97,
+      "passes": true
+    },
+    {
+      "theme": "light",
+      "foreground": "muted",
+      "background": "surface",
+      "ratio": 5.53,
+      "passes": true
+    },
+    {
+      "theme": "light",
+      "foreground": "ink",
+      "background": "quiet",
+      "ratio": 12.06,
+      "passes": true
+    },
+    {
+      "theme": "light",
+      "foreground": "success",
+      "background": "quiet",
+      "ratio": 5.3,
+      "passes": true
+    },
+    {
+      "theme": "light",
+      "foreground": "accentInk",
+      "background": "accent",
+      "ratio": 5.3,
+      "passes": true
+    },
+    {
+      "theme": "light",
+      "foreground": "onAction",
+      "background": "action",
+      "ratio": 11.38,
+      "passes": true
+    },
+    {
+      "theme": "light",
+      "foreground": "danger",
+      "background": "surface",
+      "ratio": 6.78,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "ink",
+      "background": "canvas",
+      "ratio": 15.63,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "muted",
+      "background": "canvas",
+      "ratio": 8.81,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "ink",
+      "background": "surface",
+      "ratio": 13.56,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "muted",
+      "background": "surface",
+      "ratio": 7.64,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "ink",
+      "background": "quiet",
+      "ratio": 11.32,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "success",
+      "background": "quiet",
+      "ratio": 7.2,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "accentInk",
+      "background": "accent",
+      "ratio": 6.6,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "onAction",
+      "background": "action",
+      "ratio": 11.55,
+      "passes": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "danger",
+      "background": "surface",
+      "ratio": 8.57,
+      "passes": true
+    }
+  ],
+  "targetReports": [
+    {
+      "screen": "home",
+      "targets": [
+        {
+          "label": "나의 몰라 열기",
+          "width": 48,
+          "height": 48,
+          "disabled": false
+        },
+        {
+          "label": "몰라와 이야기하기",
+          "width": 342,
+          "height": 60,
+          "disabled": false
+        },
+        {
+          "label": "내일 일정, 같이 정리할까?",
+          "width": 342,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "가족에게 안부 전하고 싶어",
+          "width": 342,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "홈",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "대화",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "부탁",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "나의 몰라",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "screen": "chat",
+      "targets": [
+        {
+          "label": "홈으로 돌아가기",
+          "width": 48,
+          "height": 48,
+          "disabled": false
+        },
+        {
+          "label": "최근 답변 읽어주기",
+          "width": 48,
+          "height": 48,
+          "disabled": false
+        },
+        {
+          "label": "메시지 보내기",
+          "width": 48,
+          "height": 48,
+          "disabled": true
+        },
+        {
+          "label": "홈",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "대화",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "부탁",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "나의 몰라",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "screen": "approval",
+      "targets": [
+        {
+          "label": "대화로 돌아가기",
+          "width": 48,
+          "height": 48,
+          "disabled": false
+        },
+        {
+          "label": "좋아요, 초안 준비해 줘",
+          "width": 342,
+          "height": 60,
+          "disabled": false
+        },
+        {
+          "label": "지금은 괜찮아요",
+          "width": 342,
+          "height": 60,
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "screen": "profile",
+      "targets": [
+        {
+          "label": "기기 설정",
+          "width": 108.7,
+          "height": 66,
+          "disabled": false
+        },
+        {
+          "label": "밝게",
+          "width": 108.7,
+          "height": 66,
+          "disabled": false
+        },
+        {
+          "label": "어둡게",
+          "width": 108.7,
+          "height": 66,
+          "disabled": false
+        },
+        {
+          "label": "홈",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "대화",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "부탁",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        },
+        {
+          "label": "나의 몰라",
+          "width": 80.5,
+          "height": 58,
+          "disabled": false
+        }
+      ]
+    }
+  ],
+  "checks": [
+    "18 semantic text contrast pairs",
+    "visible touch target geometry",
+    "keyboard focus and Enter activation",
+    "manual rejection",
+    "cancel destructive reset",
+    "reduced-motion preference"
+  ],
+  "limits": [
+    "Browser target geometry is not a native accessibility-tree test.",
+    "Native Dynamic Type, VoiceOver/TalkBack, haptics and soft keyboard need device review."
+  ]
+}
