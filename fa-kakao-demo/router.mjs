@@ -5,6 +5,10 @@ import { evaluate, canVote, approvalState } from '../fa-engine/src/policy.js';
 import { seedFamily, polish } from '../fa-engine/src/family.js';
 
 const LABEL = { mom: '엄마', dad: '아빠', son: '아들' };
+// Korean particles: 받침 decides 이/가 and 와/과.
+const hasBatchim = (word) => { const c = word.charCodeAt(word.length - 1) - 0xac00; return c >= 0 && c <= 11171 && c % 28 !== 0; };
+const subj = (word) => word + (hasBatchim(word) ? '이' : '가');
+const andJoin = (words) => words.reduce((acc, w, i) => (i === 0 ? w : acc + (hasBatchim(words[i - 1]) ? '과 ' : '와 ') + w), '');
 const MEMBERS = new Set([...Object.keys(LABEL), 'aunt', 'friend', 'fa']);
 const ACTIONS = new Set(['welcome', 'chat', 'setup', 'login', 'scope', 'deny', 'scan', 'propose', 'approve', 'cosign', 'retire']);
 const FAMILY = (() => {
@@ -139,7 +143,7 @@ function ready(room, owner, grant) {
   room.connections.set(owner, { grant });
   transition(room, 'ready', owner, { grant });
   const name = LABEL[owner];
-  return reply(room, grant ? `${name}가 아들에게 구독 목록 조회를 허용했어요.` : `${name}의 데모 계정이 연결됐어요.`, {
+  return reply(room, grant ? `${subj(name)} 아들에게 구독 목록 조회를 허용했어요.` : `${name}의 데모 계정이 연결됐어요.`, {
     kind: 'ready',
     title: '구독 목록을 확인할 수 있어요',
     description: grant ? '조회 결과는 지금 참여 중인 가족에게 공유돼요.' : '조회 결과는 계정 주인에게만 보여요.',
@@ -253,12 +257,12 @@ function decideTransfer(room, actor, vote, id) {
   }
   transition(room, 'idle');
   if (state === 'rejected') {
-    return reply(room, `${LABEL[actor]}가 거절해서 송금하지 않기로 했어요.`, {
+    return reply(room, `${subj(LABEL[actor])} 거절해서 송금하지 않기로 했어요.`, {
       kind: 'result', title: '송금하지 않음', description: '돈은 나가지 않았어요.', rows,
     });
   }
   const signers = Object.keys(p.votes).filter((id) => p.votes[id] === 'approve').map((id) => LABEL[id]);
-  return reply(room, `${signers.join('와 ')}가 승인해서 송금 초안을 준비했어요.`, {
+  return reply(room, `${subj(andJoin(signers))} 승인해서 송금 초안을 준비했어요.`, {
     kind: 'result',
     title: '송금 초안 준비 완료',
     description: '데모라서 실제 이체는 하지 않았어요. 실제 서비스에서는 이 단계에서 계정 주인의 VM이 이체를 실행해요.',
@@ -330,7 +334,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
   }
 
   if (action === 'login' && phase === 'awaiting-login') {
-    if (actor !== owner || value !== `${owner}-demo`) return reply(room, `${name}가 본인의 샘플 계정을 선택해 주세요.`);
+    if (actor !== owner || value !== `${owner}-demo`) return reply(room, `${subj(name)} 본인의 샘플 계정을 선택해 주세요.`);
     if (owner === 'son' || !room.members.includes('son')) return ready(room, owner);
     transition(room, 'awaiting-scope', owner);
     return reply(room, `${name}의 데모 계정이 연결됐어요. 아들이 도울 범위를 확인해 주세요.`, {
@@ -345,7 +349,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
   }
 
   if (phase === 'awaiting-scope' && ['scope', 'deny'].includes(action)) {
-    if (actor !== owner) return reply(room, `조회 권한은 ${name}가 결정해요.`);
+    if (actor !== owner) return reply(room, `조회 권한은 ${subj(name)} 결정해요.`);
     if (action === 'deny') return ready(room, owner);
     return ready(room, owner, { actor: 'son', visibleTo: room.members.filter((id) => id !== 'fa') });
   }
@@ -353,10 +357,10 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
   if (['scan', 'propose', 'setup'].includes(action)) {
     if (!canRead && !helper) return reply(room, '이 계정의 목록을 조회할 권한이 없어요.');
     if (phase === 'awaiting-login') return reply(room, `${name}의 계정 연결을 기다리고 있어요.`);
-    if (phase === 'awaiting-scope') return reply(room, `${name}가 목록 조회 권한을 결정할 때까지 기다려 주세요.`);
+    if (phase === 'awaiting-scope') return reply(room, `${subj(name)} 목록 조회 권한을 결정할 때까지 기다려 주세요.`);
     if (action === 'setup') return reply(room, `${name}의 계정이 이미 연결되어 있어요.`);
     if (!canRead) return reply(room, '이 계정의 목록을 조회할 권한이 없어요.');
-    if (phase === 'awaiting-approval') return reply(room, `${name}가 해지 요청을 확인하고 있어요.`);
+    if (phase === 'awaiting-approval') return reply(room, `${subj(name)} 해지 요청을 확인하고 있어요.`);
 
     if (action === 'scan') return readList(room, vm, actor, owner, grant);
 
@@ -384,12 +388,12 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
   }
 
   if (phase === 'awaiting-approval' && ['approve', 'deny'].includes(action)) {
-    if (actor !== owner) return reply(room, `해지 여부는 계정 주인인 ${name}가 결정해요.`);
+    if (actor !== owner) return reply(room, `해지 여부는 계정 주인인 ${subj(name)} 결정해요.`);
     if (pending.id !== (fromChat ? approval_id : value)) {
       return reply(room, '가장 최근 해지 요청에서 다시 확인해 주세요.');
     }
     transition(room, 'review', owner, { grant, list });
-    if (action === 'deny') return listCard(room, `${name}가 ${pending.service.name} 구독을 유지하기로 했어요.`);
+    if (action === 'deny') return listCard(room, `${subj(name)} ${pending.service.name} 구독을 유지하기로 했어요.`);
     let result;
     try {
       result = run(vm, 'subscriptions.cancel', pending.actor, owner, { service_id: pending.service.id },
@@ -403,7 +407,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
     }
     const { subscription } = result;
     transition(room, 'complete', owner, { grant });
-    return reply(room, `${name}가 승인한 ${subscription.name} 구독 해지 데모를 마쳤어요.`, {
+    return reply(room, `${subj(name)} 승인한 ${subscription.name} 구독 해지 데모를 마쳤어요.`, {
       kind: 'result', title: `${subscription.name} 해지 완료`,
       description: 'VM 에이전트가 시뮬레이션 결과를 돌려줬어요. 실제 구독과 결제에는 영향이 없어요.',
       rows: [
