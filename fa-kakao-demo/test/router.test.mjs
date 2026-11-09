@@ -57,7 +57,7 @@ test('the requester can read an owner VM only after owner consent and cannot app
   assert.equal((await room.act('dad', 'scan')).state.phase, 'ready');
   const list = await room.act('son', 'scan');
   assert.equal(list.card.kind, 'subscriptions');
-  assert.ok(list.card.rows.some(({ detail }) => detail === '엄마의 VM'));
+  assert.ok(list.card.rows.some(({ detail }) => detail === '엄마 전용 컴퓨터'));
   assert.equal(list.card.actions.length, 3);
   assert.deepEqual(list.messages[0].visibleTo, ['son', 'mom', 'dad']);
   const proposal = await room.act('son', 'propose', 'tving');
@@ -66,7 +66,7 @@ test('the requester can read an owner VM only after owner consent and cannot app
   assert.equal((await room.act('son', 'approve', id)).state.phase, 'awaiting-approval');
   const done = await room.act('mom', 'approve', id);
   assert.equal(done.state.phase, 'complete');
-  assert.match(done.card.description, /시뮬레이션/);
+  assert.match(done.card.description, /연습/);
   assert.equal((await room.act('mom', 'approve', id)).card, undefined);
   assert.deepEqual((await room.act('son', 'scan')).card.actions.map(({ value }) => value), ['melon', 'naver']);
 });
@@ -102,7 +102,7 @@ test('ambiguous or unsupported requests cannot silently route to an existing own
   await room.act('dad', 'scope');
   const list = await room.act('son', 'scan');
   assert.deepEqual(list.card.actions.map(({ value }) => value), ['melon']);
-  assert.ok(list.card.rows.some(({ detail }) => detail === '아빠의 VM'));
+  assert.ok(list.card.rows.some(({ detail }) => detail === '아빠 전용 컴퓨터'));
   assert.equal((await room.act('son', 'chat', '엄마 구독 보여줘')).card.actions.length, 3);
   assert.equal((await room.act('son', 'chat', '내 구독 보여줘')).state.owner, 'son');
 });
@@ -159,7 +159,7 @@ test('a selectable guest can chat without obtaining VM permissions', async (t) =
   await connect(room);
   const denied = await room.act('aunt', 'chat', '엄마 구독 목록 보여줘');
   assert.equal(denied.state.phase, 'ready');
-  assert.match(denied.messages[0].text, /조회할 권한이 없어요/);
+  assert.match(denied.messages[0].text, /볼 수 없어요/);
 });
 
 test('FA engine family multisig: owner + one co-signer; requester and beneficiary cannot sign', async (t) => {

@@ -72,16 +72,12 @@ test('dad moving mom\'s money needs mom + son (dad never counts), then a 3-hour 
   assert.equal(snap.audit.verified, true);
 });
 
-test('voice phishing is held, evidence sealed, impostor approval rejected, scam report locks down', { skip: !trustAvailable() }, async (t) => {
-  const { act, trust, impostor } = await demo(t);
+test('voice phishing (fraud) is held, evidence sealed, scam report locks down', { skip: !trustAvailable() }, async (t) => {
+  const { act, trust } = await demo(t);
   const held = cardOf(await act('mom', 'chat', '검찰청이라는데 안전계좌로 300만원 옮기래. 가족한테는 말하지 말래'));
   assert.equal(held.kind, 'blocked');
   assert.match(held.title, /보이스피싱/);
   assert.ok(held.rows.some((r) => /안전계좌/.test(r.label)));
-
-  const fake = await impostor();
-  assert.equal(fake.ok, true);
-  assert.equal(fake.status, 'held');
 
   const scam = buttonOf(held, 'trust_scam');
   assert.ok(scam.actors.includes('son') && !scam.actors.includes('mom'));
@@ -89,27 +85,27 @@ test('voice phishing is held, evidence sealed, impostor approval rejected, scam 
   assert.ok(locked.messages.some((m) => /긴급 잠금/.test(m.card?.title ?? '')));
 
   const snap = await trust();
-  for (const type of ['family_alert', 'evidence', 'proof_failed', 'lockdown']) {
+  for (const type of ['family_alert', 'evidence', 'lockdown']) {
     assert.ok(snap.events.some((e) => e.type === type), `missing ${type}`);
   }
+  assert.ok(!snap.events.some((e) => e.type === 'self_destruct'), 'fraud is not an intrusion');
   assert.equal(snap.evidenceCount, 1);
 
   // Two family devices unlock it again.
   await act('son', 'trust_unlock', 'unlock');
   const unlocked = await act('dad', 'trust_unlock', 'unlock');
-  assert.match(unlocked.messages[0].text, /잠금을 풀고/);
+  assert.match(unlocked.messages[0].text, /잠금을 풀었어요/);
 });
 
-test('impostor approval holds a pending transfer; a second attempt locks down', { skip: !trustAvailable() }, async (t) => {
+test('impostor approval (takeover) self-destructs FA; sealed evidence remains', { skip: !trustAvailable() }, async (t) => {
   const { act, trust, impostor } = await demo(t);
   await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
-  assert.equal((await impostor()).status, 'held');
-  let snap = await trust();
-  assert.ok(snap.events.some((e) => e.type === 'family_alert' && /사칭/.test(e.message)));
-  assert.equal(snap.evidenceCount, 1);
   assert.equal((await impostor()).status, 'cancelled');
-  snap = await trust();
-  assert.ok(snap.events.some((e) => e.type === 'lockdown'));
+  const snap = await trust();
+  assert.ok(snap.events.some((e) => e.type === 'proof_failed'));
+  assert.ok(snap.events.some((e) => e.type === 'self_destruct' && /탈취/.test(e.message)));
+  assert.equal(snap.locked, true);
+  assert.equal(snap.evidenceCount, 1);
   assert.equal(snap.linkCount, 0);
 });
 
