@@ -1,0 +1,61 @@
+{
+  "passed": true,
+  "provider": "letsur",
+  "model": "gpt-4.1-mini",
+  "checkedAt": "2026-11-09T04:09:53.323Z",
+  "android": true,
+  "checks": [
+    "Saved Android profile started with 180-second provider timeout; authenticated ADB connected",
+    "Mobile HTTP client → actual authenticated Node API → actual Letsur model",
+    "No implicit consent; memory sharing remains off",
+    "Identical requestId is not billed or generated twice",
+    "Other family member cannot read this conversation",
+    "Actual screen endpoint → React Native Web image decoded and displayed; other owner denied",
+    "Model planned settings app → exact owner approval → ADB launch → foreground package verification"
+  ],
+  "responses": [
+    {
+      "reply": "실행할 앱과 내 실행 공간을 확인한 뒤 승인해 주세요.",
+      "usage": {
+        "inputTokens": 425,
+        "outputTokens": 27
+      },
+      "estimatedCost": {
+        "amount": 0.0002132,
+        "currency": "unit"
+      },
+      "action": "app.open"
+    }
+  ],
+  "accountBefore": {
+    "rateCentsPerMinute": 5,
+    "activeSessions": 0
+  },
+  "quote": {
+    "durationMinutes": 3,
+    "estimatedMaxUsd": 0.15
+  },
+  "startRequestedAt": "2026-11-09T04:10:08.204Z",
+  "providerExpiresAt": "2026-11-09T04:13:13.74Z",
+  "androidEvidence": {
+    "kind": "app_opened",
+    "package": "com.android.settings",
+    "verified": true,
+    "screenshot": "docs/live/screenshots/mom-android-settings.png",
+    "viewerScreenshot": "docs/live/screenshots/mom-android-live-viewer.png",
+    "width": 720,
+    "height": 1280,
+    "capturedAt": "2026-11-09T04:11:06.369Z",
+    "sha256": "8fc0cb069c6e8b8c9a5c157aa7f7ca157408d3ab14bd0b251e5b9862436dd2eb",
+    "actualViewerRendered": true
+  },
+  "stopRequestedAt": "2026-11-09T04:11:06.512Z",
+  "stopped": true,
+  "finalVmState": "stopped",
+  "stoppedAt": "2026-11-09T04:11:48.097Z",
+  "accountAfter": {
+    "rateCentsPerMinute": 5,
+    "activeSessions": 0
+  },
+  "vmCreditUsedUsd": 0.05
+}
