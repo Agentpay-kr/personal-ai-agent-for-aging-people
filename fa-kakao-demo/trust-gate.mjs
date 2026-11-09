@@ -105,7 +105,8 @@ export function createTrustGate() {
     return {
       text: d.reasons.join('\n'),
       card: {
-        kind: 'approval', audience: owner,
+        // No `audience`: the app would disable every button for non-owners. Per-button actor/actors gate it.
+        kind: 'approval',
         title: `🔐 ${r.summary}`,
         description: `돈이 나가는 요청이라 ${LABEL[owner]}의 기기 승인이 필요해요. 가족 모두에게 공개돼요.`,
         rows: [

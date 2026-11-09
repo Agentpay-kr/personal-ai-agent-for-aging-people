@@ -37,7 +37,8 @@ test('dad moving mom\'s money needs mom + son (dad never counts), then a 3-hour 
   const { act, trust } = await demo(t);
   const asked = cardOf(await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘'));
   assert.equal(asked.kind, 'approval');
-  assert.equal(asked.audience, 'mom');
+  // No card-wide audience, or the app disables son's co-sign button.
+  assert.equal(asked.audience, undefined);
   const [momButton, cosign] = asked.actions.filter((a) => a.action === 'trust_approve');
   assert.equal(momButton.actor, 'mom');
   assert.deepEqual(cosign.actors, ['son']);
