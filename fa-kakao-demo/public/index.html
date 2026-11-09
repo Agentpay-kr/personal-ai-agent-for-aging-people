@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f8f8f8">
+  <title>Family AI Agent | 카카오톡 목업</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/trust-panel.css">
+  <script type="module" src="/app.mjs"></script>
+  <script type="module" src="/trust-panel.mjs"></script>
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand"><span class="talk-logo" aria-hidden="true">TALK</span><strong>카카오톡</strong><span class="prototype">발표용 데모</span></div>
+    <div class="presentation">
+      <span id="api-mode" class="api-mode" aria-live="polite">연결 확인 중</span>
+      <button id="guide" type="button" class="guide-button">시연 안내</button>
+      <label class="role-picker"><span class="role-label">보는 사람</span><select id="persona" aria-label="보는 사람"></select></label>
+    </div>
+  </header>
+  <main class="shell" id="shell">
+    <nav id="rail" class="rail" aria-label="카카오톡 메뉴"></nav>
+    <aside id="sidebar" class="sidebar" aria-label="친구 및 채팅 목록"></aside>
+    <section id="chat" class="chat" aria-label="채팅방"></section>
+  </main>
+  <dialog id="dialog" aria-labelledby="modal-title"></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

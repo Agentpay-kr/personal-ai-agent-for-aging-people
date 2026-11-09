@@ -161,6 +161,8 @@ export class FamilyTrust {
   #listeners: Array<(e: TrustEvent) => void> = [];
   #frozen = false;
   #lockCount = 0;
+  /** Forged approvals seen per request. The 2nd one on the same request triggers a lockdown. */
+  readonly #impostorStrikes = new Map<string, number>();
 
   constructor(opts: FamilyTrustOptions) {
     if (opts.members.length < 2) throw new Error('a family needs at least 2 members');
@@ -301,6 +303,29 @@ export class FamilyTrust {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
 
+    // Transfers: the beneficiary and a non-owner requester never count as approvers.
+    if (request.kind === 'transfer' && decision.outcome !== 'block') {
+      const eligible = this.#eligibleApprovers(request);
+      const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
+      if (eligible.length < decision.approvalsRequired) {
+        decision = {
+          ...decision,
+          outcome: 'block',
+          reasons: [...decision.reasons, '⛔ 받는 사람과 요청한 사람을 빼면 승인할 가족이 부족해서 실행할 수 없어요.'],
+        };
+      } else if (excluded.length) {
+        decision = {
+          ...decision,
+          reasons: [
+            ...decision.reasons,
+            `🚫 ${excluded.map((m) => this.name(m)).join('·')}은(는) 요청했거나 돈을 받는 사람이라 승인자로 셀 수 없어요. ` +
+              `${eligible.map((m) => this.name(m)).join('·')} 중 ${decision.approvalsRequired}명의 기기 승인이 필요해요.`,
+          ],
+        };
+      }
+    }
+
+    // The AI judge runs after the rules (including approver exclusion). It can only escalate.
     let judged: (JudgeVerdict & { effect: JudgeEffect }) | undefined;
     if (this.#judge && decision.outcome !== 'block') {
       const verdict = await this.#runJudge({
@@ -322,7 +347,7 @@ export class FamilyTrust {
       id,
       request,
       decision,
-      approvals: verified ? [request.requester] : [],
+      approvals: verified && !this.#approverExclusion(request, request.requester) ? [request.requester] : [],
       status: decision.outcome === 'hold' ? 'held' : decision.outcome === 'block' ? 'blocked' : 'pending',
       createdAt: this.#now(),
       judge: judged,
@@ -363,6 +388,7 @@ export class FamilyTrust {
         `⚠️ "${this.name(memberId)}" 이름으로 승인이 왔지만 등록된 기기의 ZK 증명이 아니에요. 무시하고 기록했어요.`,
         requestId,
       );
+      await this.#onImpostor(a, memberId);
       return a;
     }
     if (this.#frozen) {
@@ -375,6 +401,12 @@ export class FamilyTrust {
     }
     if (a.status !== 'pending' && a.status !== 'held') {
       this.#emit('info', `이미 처리된 요청이에요 (${a.status}).`, requestId);
+      return a;
+    }
+    const excluded = this.#approverExclusion(a.request, memberId);
+    if (excluded) {
+      this.audit.append('approval_refused', memberId, excluded, { requestId });
+      this.#emit('info', `🚫 ${this.name(memberId)}: ${excluded}`, requestId);
       return a;
     }
     if (!a.approvals.includes(memberId)) a.approvals.push(memberId);
@@ -738,6 +770,53 @@ export class FamilyTrust {
     } finally {
       key.fill(0);
     }
+  }
+
+  /** Why `member` can't approve this request, or null if they can. */
+  #approverExclusion(req: ActionRequest, member: MemberId): string | null {
+    if (req.kind !== 'transfer') return null;
+    if (req.payeeOwner !== undefined && member === req.payeeOwner && member !== req.owner) {
+      return '돈을 받는 사람은 승인할 수 없어요.';
+    }
+    if (member === req.requester && member !== req.owner) return '요청한 사람은 승인자로 셀 수 없어요.';
+    return null;
+  }
+
+  #eligibleApprovers(req: ActionRequest): MemberId[] {
+    return [...this.#members.keys()].filter((m) => !this.#approverExclusion(req, m));
+  }
+
+  // Someone tried to approve as a family member without that member's device.
+  // 1st time: hold the request, demand one more family device, alert everyone, seal evidence.
+  // 2nd time on the same request: emergency lockdown. (Not on the 1st, so forged
+  // approvals alone can't be used to wipe the family's connections.)
+  async #onImpostor(a: PendingAction, claimed: MemberId): Promise<void> {
+    if (!OPEN.includes(a.status)) return;
+    const strikes = (this.#impostorStrikes.get(a.id) ?? 0) + 1;
+    this.#impostorStrikes.set(a.id, strikes);
+    this.audit.append('impostor', claimed, `사칭 승인 시도 ${strikes}회`, { requestId: a.id });
+
+    if (strikes >= 2) {
+      await this.lockdown('FA 자동 감지', `같은 요청에 "${this.name(claimed)}" 사칭 승인 ${strikes}회`);
+      return;
+    }
+
+    const wasScheduled = a.status === 'scheduled';
+    a.status = 'held';
+    a.executeAfter = undefined;
+    a.decision = {
+      ...a.decision,
+      approvalsRequired: Math.min(a.decision.approvalsRequired + 1, this.#eligibleApprovers(a.request).length),
+      notifyFamily: true,
+      reasons: [...a.decision.reasons, '🎭 사칭 승인 시도가 있어서 가족 1명의 기기 확인이 더 필요해요.'],
+    };
+    this.#emit(
+      'family_alert',
+      `👨‍👩‍👦 가족 전체 알림: "${this.name(claimed)}" 사칭 승인 시도 감지 → "${a.request.summary ?? a.request.kind}" 보류` +
+        `${wasScheduled ? ' (예약 실행 취소)' : ''}. 이제 가족 ${a.decision.approvalsRequired}명의 기기 확인이 필요해요. 한 번 더 시도되면 긴급 잠금해요.`,
+      a.id,
+    );
+    if (!a.evidenceId) a.evidenceId = await this.#sealEvidence(a);
   }
 
   async #sealEvidence(a: PendingAction): Promise<string> {

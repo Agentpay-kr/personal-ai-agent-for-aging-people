@@ -3543,6 +3543,8 @@ var FamilyTrust = class {
   #listeners = [];
   #frozen = false;
   #lockCount = 0;
+  /** Forged approvals seen per request. The 2nd one on the same request triggers a lockdown. */
+  #impostorStrikes = /* @__PURE__ */ new Map();
   constructor(opts) {
     if (opts.members.length < 2) throw new Error("a family needs at least 2 members");
     this.familyId = opts.familyId ?? shortId("family");
@@ -3650,6 +3652,25 @@ var FamilyTrust = class {
     } else {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
+    if (request.kind === "transfer" && decision.outcome !== "block") {
+      const eligible = this.#eligibleApprovers(request);
+      const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
+      if (eligible.length < decision.approvalsRequired) {
+        decision = {
+          ...decision,
+          outcome: "block",
+          reasons: [...decision.reasons, "\u26D4 \uBC1B\uB294 \uC0AC\uB78C\uACFC \uC694\uCCAD\uD55C \uC0AC\uB78C\uC744 \uBE7C\uBA74 \uC2B9\uC778\uD560 \uAC00\uC871\uC774 \uBD80\uC871\uD574\uC11C \uC2E4\uD589\uD560 \uC218 \uC5C6\uC5B4\uC694."]
+        };
+      } else if (excluded.length) {
+        decision = {
+          ...decision,
+          reasons: [
+            ...decision.reasons,
+            `\u{1F6AB} ${excluded.map((m) => this.name(m)).join("\xB7")}\uC740(\uB294) \uC694\uCCAD\uD588\uAC70\uB098 \uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC774\uB77C \uC2B9\uC778\uC790\uB85C \uC140 \uC218 \uC5C6\uC5B4\uC694. ${eligible.map((m) => this.name(m)).join("\xB7")} \uC911 ${decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uC2B9\uC778\uC774 \uD544\uC694\uD574\uC694.`
+          ]
+        };
+      }
+    }
     let judged;
     if (this.#judge && decision.outcome !== "block") {
       const verdict = await this.#runJudge({
@@ -3670,7 +3691,7 @@ var FamilyTrust = class {
       id,
       request,
       decision,
-      approvals: verified ? [request.requester] : [],
+      approvals: verified && !this.#approverExclusion(request, request.requester) ? [request.requester] : [],
       status: decision.outcome === "hold" ? "held" : decision.outcome === "block" ? "blocked" : "pending",
       createdAt: this.#now(),
       judge: judged
@@ -3708,6 +3729,7 @@ var FamilyTrust = class {
         `\u26A0\uFE0F "${this.name(memberId)}" \uC774\uB984\uC73C\uB85C \uC2B9\uC778\uC774 \uC654\uC9C0\uB9CC \uB4F1\uB85D\uB41C \uAE30\uAE30\uC758 ZK \uC99D\uBA85\uC774 \uC544\uB2C8\uC5D0\uC694. \uBB34\uC2DC\uD558\uACE0 \uAE30\uB85D\uD588\uC5B4\uC694.`,
         requestId
       );
+      await this.#onImpostor(a, memberId);
       return a;
     }
     if (this.#frozen) {
@@ -3720,6 +3742,12 @@ var FamilyTrust = class {
     }
     if (a.status !== "pending" && a.status !== "held") {
       this.#emit("info", `\uC774\uBBF8 \uCC98\uB9AC\uB41C \uC694\uCCAD\uC774\uC5D0\uC694 (${a.status}).`, requestId);
+      return a;
+    }
+    const excluded = this.#approverExclusion(a.request, memberId);
+    if (excluded) {
+      this.audit.append("approval_refused", memberId, excluded, { requestId });
+      this.#emit("info", `\u{1F6AB} ${this.name(memberId)}: ${excluded}`, requestId);
       return a;
     }
     if (!a.approvals.includes(memberId)) a.approvals.push(memberId);
@@ -4038,6 +4066,47 @@ var FamilyTrust = class {
     } finally {
       key.fill(0);
     }
+  }
+  /** Why `member` can't approve this request, or null if they can. */
+  #approverExclusion(req, member) {
+    if (req.kind !== "transfer") return null;
+    if (req.payeeOwner !== void 0 && member === req.payeeOwner && member !== req.owner) {
+      return "\uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC740 \uC2B9\uC778\uD560 \uC218 \uC5C6\uC5B4\uC694.";
+    }
+    if (member === req.requester && member !== req.owner) return "\uC694\uCCAD\uD55C \uC0AC\uB78C\uC740 \uC2B9\uC778\uC790\uB85C \uC140 \uC218 \uC5C6\uC5B4\uC694.";
+    return null;
+  }
+  #eligibleApprovers(req) {
+    return [...this.#members.keys()].filter((m) => !this.#approverExclusion(req, m));
+  }
+  // Someone tried to approve as a family member without that member's device.
+  // 1st time: hold the request, demand one more family device, alert everyone, seal evidence.
+  // 2nd time on the same request: emergency lockdown. (Not on the 1st, so forged
+  // approvals alone can't be used to wipe the family's connections.)
+  async #onImpostor(a, claimed) {
+    if (!OPEN.includes(a.status)) return;
+    const strikes = (this.#impostorStrikes.get(a.id) ?? 0) + 1;
+    this.#impostorStrikes.set(a.id, strikes);
+    this.audit.append("impostor", claimed, `\uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4 ${strikes}\uD68C`, { requestId: a.id });
+    if (strikes >= 2) {
+      await this.lockdown("FA \uC790\uB3D9 \uAC10\uC9C0", `\uAC19\uC740 \uC694\uCCAD\uC5D0 "${this.name(claimed)}" \uC0AC\uCE6D \uC2B9\uC778 ${strikes}\uD68C`);
+      return;
+    }
+    const wasScheduled = a.status === "scheduled";
+    a.status = "held";
+    a.executeAfter = void 0;
+    a.decision = {
+      ...a.decision,
+      approvalsRequired: Math.min(a.decision.approvalsRequired + 1, this.#eligibleApprovers(a.request).length),
+      notifyFamily: true,
+      reasons: [...a.decision.reasons, "\u{1F3AD} \uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4\uAC00 \uC788\uC5B4\uC11C \uAC00\uC871 1\uBA85\uC758 \uAE30\uAE30 \uD655\uC778\uC774 \uB354 \uD544\uC694\uD574\uC694."]
+    };
+    this.#emit(
+      "family_alert",
+      `\u{1F468}\u200D\u{1F469}\u200D\u{1F466} \uAC00\uC871 \uC804\uCCB4 \uC54C\uB9BC: "${this.name(claimed)}" \uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4 \uAC10\uC9C0 \u2192 "${a.request.summary ?? a.request.kind}" \uBCF4\uB958${wasScheduled ? " (\uC608\uC57D \uC2E4\uD589 \uCDE8\uC18C)" : ""}. \uC774\uC81C \uAC00\uC871 ${a.decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uD655\uC778\uC774 \uD544\uC694\uD574\uC694. \uD55C \uBC88 \uB354 \uC2DC\uB3C4\uB418\uBA74 \uAE34\uAE09 \uC7A0\uAE08\uD574\uC694.`,
+      a.id
+    );
+    if (!a.evidenceId) a.evidenceId = await this.#sealEvidence(a);
   }
   async #sealEvidence(a) {
     const holders = [...this.#members.keys()];

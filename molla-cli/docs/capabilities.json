@@ -1,8 +1,10 @@
 {
   "name": "molla",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "schema_version": "1.0",
-  "transport": "local-http-cookie",
+  "transport": "direct-process-sqlite",
+  "http_server_required": false,
+  "browser_required": false,
   "production_auth": false,
   "operations": [
     {
@@ -132,6 +134,35 @@
           "type": "string",
           "required": false,
           "max": 64
+        },
+        "ownerToken": {
+          "type": "string",
+          "required": false,
+          "max": 100
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "task.execute",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "task.recover",
+      "arguments": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "max": 100
         }
       },
       "read_only": false,
@@ -214,6 +245,11 @@
           "type": "string",
           "required": true,
           "max": 100
+        },
+        "ownerToken": {
+          "type": "string",
+          "required": false,
+          "max": 100
         }
       },
       "read_only": false,
@@ -259,6 +295,11 @@
           "type": "string",
           "required": true,
           "max": 24
+        },
+        "ownerToken": {
+          "type": "string",
+          "required": false,
+          "max": 100
         }
       },
       "read_only": false,
@@ -306,6 +347,24 @@
       "requires_session": true
     },
     {
+      "name": "vm.app.plan",
+      "arguments": {
+        "appId": {
+          "type": "string",
+          "required": true,
+          "values": [
+            "settings",
+            "browser",
+            "kakao",
+            "coupang",
+            "calendar"
+          ]
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
       "name": "consent.set",
       "arguments": {
         "value": {
@@ -319,6 +378,32 @@
         "ownerConfirmed": {
           "type": "boolean",
           "required": true
+        },
+        "ownerToken": {
+          "type": "string",
+          "required": false,
+          "max": 100
+        }
+      },
+      "read_only": false,
+      "requires_session": true
+    },
+    {
+      "name": "permission.set",
+      "arguments": {
+        "scopes": {
+          "type": "string",
+          "required": true,
+          "max": 100
+        },
+        "ownerConfirmed": {
+          "type": "boolean",
+          "required": true
+        },
+        "ownerToken": {
+          "type": "string",
+          "required": false,
+          "max": 100
         }
       },
       "read_only": false,
@@ -326,12 +411,23 @@
     }
   ],
   "approval": {
-    "operation": "task.decide",
-    "owner_confirmation_required": true,
-    "action_hash_required": true
+    "atomic_action_hash_check": true,
+    "explicit_execute_command": true,
+    "owner_proof_required": [
+      "task.decide(approve)",
+      "consent.set(active)",
+      "permission.set",
+      "memory.share",
+      "contact.add"
+    ],
+    "owner_proof_channels": [
+      "interactive-terminal-code",
+      "owner-token(MOLLA_OWNER_KEY, host app only)"
+    ]
   },
   "vm": {
     "per_owner": true,
+    "driver": "adb-cli",
     "automatic_sending": false
   }
 }
