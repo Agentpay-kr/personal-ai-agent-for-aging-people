@@ -27,8 +27,9 @@ Branch: `feat/real-agent-mobile-vm`. Reused the backend merged at `f7e79de`, the
 | `fa-engine` | 26/26 pass |
 | `fa-trust` current main | 52/52 pass (`node --import tsx --test test/*.test.ts`) |
 | Standalone CLI on Windows | 23/25 pass, same two baseline failures: POSIX mode assertion and Windows symlink creation permission |
+| Linux GitHub Actions | pass: original CLI suite, new API, Python adapter, existing server, mobile TypeScript and HTTP runtime |
 
-The Windows CLI failures were not hidden or converted into passes. The new API separately applies a private Windows directory ACL. A Linux CI workflow runs the original CLI permission/symlink tests on a platform that supports them. Until that CI completes, it is not a locally verified Linux result.
+The Windows CLI failures were not hidden or converted into passes. The new API separately applies a private Windows directory ACL. [Linux CI run 42562986787](https://github.com/him55710-sudo/personal-ai-agent-for-aging-people/actions/runs/42562986787) passed on commit `36c6ff49c8a42817274e6ca3150d48a1e5442960`, including the unchanged CLI permission/symlink tests. This is CI evidence, not a local Linux run or a live provider test.
 
 The fixture pipeline uses the actual mobile `apiRequest` implementation, real HTTP API and SQLite, plus controlled model/ADB responses. It verifies that an unapproved action cannot execute, a different owner cannot approve/read it, a changed hash is rejected, a duplicate cannot run twice, cancellation/timeout/restart never invent success, and family helpers cannot inherit parent privileges.
 
