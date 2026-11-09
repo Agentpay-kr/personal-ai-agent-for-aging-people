@@ -97,7 +97,7 @@ test('voice phishing is held, evidence sealed, impostor approval rejected, scam 
   // Two family devices unlock it again.
   await act('son', 'trust_unlock', 'unlock');
   const unlocked = await act('dad', 'trust_unlock', 'unlock');
-  assert.match(unlocked.messages[0].text, /잠금을 풀고/);
+  assert.match(unlocked.messages[0].text, /잠금을 풀었어요/);
 });
 
 test('impostor approval holds a pending transfer; a second attempt locks down', { skip: !trustAvailable() }, async (t) => {
