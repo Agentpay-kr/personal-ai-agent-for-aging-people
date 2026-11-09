@@ -15,6 +15,7 @@ const FAMILY_EVENTS = {
   linked: '데모 은행 연결이 갱신됐어요.',
   expired: '데모 은행 연결이 만료됐어요.',
   lockdown: '송금 긴급 잠금이 켜졌어요.',
+  self_destruct: '외부 침해가 감지되어 송금이 자동으로 잠겼어요.',
   unlocked: '가족 두 명의 기기 확인으로 송금 잠금이 풀렸어요.',
 };
 export const TRUST_ACTIONS = new Set(['trust_approve', 'trust_reject', 'trust_cancel', 'trust_scam', 'trust_skip', 'trust_unlock']);
@@ -129,7 +130,8 @@ export function createTrustGate() {
 
   function snapshot(room, actor, since) {
     const actions = roomActions(room);
-    const roomEvents = events.filter((e) => e.requestId ? findAction(room, e.requestId) : Object.hasOwn(FAMILY_EVENTS, e.type));
+    const roomEvents = events.filter((e) => e.type === 'self_destruct'
+      || (e.requestId ? findAction(room, e.requestId) : Object.hasOwn(FAMILY_EVENTS, e.type)));
     const locked = trust.frozen;
     const votes = locked ? votesFor(room) : new Set();
     const audit = trust.audit;
@@ -147,7 +149,7 @@ export function createTrustGate() {
         owner: a.request.owner, tier: a.decision.tier, approvals: a.approvals, canCancel: canCancel(a, actor),
       })),
       events: roomEvents.filter((e) => e.seq > since).slice(-60).map(({ seq, type, message, requestId, ts }) => ({
-        seq, type, message: requestId ? message : FAMILY_EVENTS[type], ts,
+        seq, type, message: requestId && findAction(room, requestId) ? message : FAMILY_EVENTS[type], ts,
       })),
       audit: {
         count: audit.entries().filter(({ data }) => data?.requestId && findAction(room, data.requestId)).length,
@@ -308,12 +310,17 @@ export function createTrustGate() {
     },
 
     async fromChat(room, actor, text) {
+      const phone = phones[actor];
+      if (!phone) return [{
+        text: '등록된 가족만 송금을 요청할 수 있어요.',
+        card: { kind: 'blocked', title: '송금 요청 차단', description: '이 채팅방에 초대된 손님은 송금을 요청할 수 없어요.' },
+        visibleTo: [actor],
+      }];
       await ready;
       const t = parseTransfer(text, actor);
       if (!room.members.includes(t.owner)) return [note(room, `${LABEL[t.owner]}가 이 방에 없어서 승인 요청을 보낼 수 없어요.`)];
       const req = { owner: t.owner, kind: 'transfer', service: 'bank', amountKRW: t.amountKRW, payee: t.payee, payeeOwner: t.payeeOwner, summary: t.summary, text: stripFaMention(text) };
-      // Unregistered phones (guests) go in without a device proof and are blocked by fa-trust.
-      const a = phones[actor] ? await trust.request(phones[actor], req) : await trust.submit({ ...req, requester: actor });
+      const a = await trust.request(phone, req);
       actionRooms.set(a.id, room);
       return [view(room, a)];
     },

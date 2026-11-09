@@ -32,11 +32,11 @@ try {
     if (endpoint === '/chat') {
       if (failChat) return respond({ error: 'AI 연결을 확인해 주세요.' }, 503);
       assert.match(body.requestId, /^[0-9a-f-]{36}$/i); assert.equal(body.owner, undefined);
-      const task = { id: 'fixture-task', owner: actor, title: '설정 앱 열기', text: body.text, summary: '내 Android에서 설정 앱을 열어요.', status: 'awaiting_approval', createdAt: new Date().toISOString(), action: { type: 'app.open', body: '설정 앱 열기', appId: 'settings', execution: 'android-app', recipient: null } };
+      const task = { approvalHash: 'a'.repeat(64), id: 'fixture-task', owner: actor, title: '설정 앱 열기', text: body.text, summary: '내 Android에서 설정 앱을 열어요.', status: 'awaiting_approval', createdAt: new Date().toISOString(), action: { type: 'app.open', body: '설정 앱 열기', appId: 'settings', execution: 'android-app', recipient: null } };
       state.tasks = [task]; state.messages.push({ id: 'fixture-user', role: 'user', text: body.text }, { id: 'fixture-assistant', role: 'assistant', text: '내용을 확인하고 승인해 주세요.', taskId: task.id });
       return respond({ reply: '내용을 확인하고 승인해 주세요.', task });
     }
-    if (endpoint === '/task/decision') { state.tasks[0].status = 'completed'; state.tasks[0].result = '테스트 API가 앱 열림 결과를 반환했습니다.'; state.tasks[0].evidence = { kind: 'app_opened', verified: true, summary: state.tasks[0].result }; return respond({ ok: true }); }
+    if (endpoint === '/task/decision') { assert.equal(body.expectedActionHash, 'a'.repeat(64)); state.tasks[0].status = 'completed'; state.tasks[0].result = '테스트 API가 앱 열림 결과를 반환했습니다.'; state.tasks[0].evidence = { kind: 'app_opened', verified: true, summary: state.tasks[0].result }; return respond({ ok: true }); }
     if (endpoint === '/phone/quote') return respond({ quoteId: 'fixture-quote', durationMinutes: body.durationMinutes, estimatedMaxUsd: .25, expiresAt: new Date(Date.now() + 60000).toISOString() });
     if (endpoint === '/phone/start') { assert.deepEqual(body, { quoteId: 'fixture-quote' }); phoneState = 'running'; return respond({ ok: true }); }
     if (endpoint === '/phone/stop') { phoneState = 'stopped'; return respond({ ok: true }); }

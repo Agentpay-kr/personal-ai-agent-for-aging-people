@@ -17,7 +17,8 @@ export async function executeTask(state,taskId,executor=new LocalDraftExecutor()
  try{
   new PolicyEngine(state).execute(t);t.executionStartedAt=now();t.step=1;persist(state);
   const authorize=()=>{const currentState=getState(),current=currentState.tasks.find(t=>t.id===taskId);if(!current||current.status!=='running')throw new DomainError('작업이 중단되었어요.',403);new PolicyEngine(currentState).execute(current);};
-  const action=structuredClone(t.action);const evidence=await executor.execute(action,{authorize});
+  const beforeEffect=()=>{authorize();const current=getState(),task=current.tasks.find(t=>t.id===taskId);task.externalEffectStartedAt=now();persist(current);};
+  const action=structuredClone(t.action);const evidence=await executor.execute(action,{authorize,beforeEffect});
   state=getState();t=state.tasks.find(t=>t.id===taskId);if(!t)return;
   // A cancellation during a device call cannot undo an already opened intent.
   if(t.status!=='running'){t.result='작업 중단을 요청했어요. 이미 열린 휴대폰 화면은 직접 확인해 주세요.';log(state,t.owner,'중단 후 실행 응답을 받았어요');persist(state);return t;}

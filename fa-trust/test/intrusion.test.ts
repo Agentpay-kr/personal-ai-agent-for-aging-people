@@ -36,7 +36,10 @@ test('takeover: the first forged approval self-destructs sessions, tasks and mem
   const { trust, mom, dad, son, events } = setup();
   await trust.linkAccount('mom', 'netflix', 'cookie=abc');
   await trust.remember('엄마는 한 달에 한 번 쌀을 주문해요', 'son');
-  const a = await trust.request(son, { owner: 'mom', kind: 'cancel_subscription', service: 'netflix', summary: '넷플릭스 해지' });
+  const text = '시연용 구독 정리 메시지';
+  const context = ['시연용 요청 첨부'];
+  const previous = await trust.request(son, { owner: 'mom', kind: 'read', text, context });
+  const a = await trust.request(son, { owner: 'mom', kind: 'cancel_subscription', service: 'netflix', summary: '넷플릭스 해지', text, context });
   assert.equal(a.status, 'pending');
 
   await trust.approveWith(new MemberDevice('mom'), a.id);
@@ -50,8 +53,14 @@ test('takeover: the first forged approval self-destructs sessions, tasks and mem
   assert.ok(trust.audit.entries().some((e) => e.type === 'self_destruct'));
   assert.equal(trust.audit.verify().ok, true);
 
-  const ev = (await trust.openEvidence(a.evidenceId!, [dad, son])) as { intrusions: Array<{ id: string }> };
+  for (const action of [a, previous]) {
+    assert.equal(trust.getAction(action.id)?.request.text, undefined);
+    assert.equal(trust.getAction(action.id)?.request.context, undefined);
+  }
+  const ev = (await trust.openEvidence(a.evidenceId!, [dad, son])) as { intrusions: Array<{ id: string }>; text: string; context: string[] };
   assert.deepEqual(ev.intrusions.map((i) => i.id), ['impostor_approval']);
+  assert.equal(ev.text, text);
+  assert.deepEqual(ev.context, context);
 
   // Coming back takes two family phones, and services must be linked again.
   assert.equal(await trust.unlockWith([mom, son]), true);
