@@ -44,11 +44,18 @@ export class AuditLog {
 
   /** Recompute the chain. Pass a copy (e.g. an exported log) to check it independently. */
   verify(entries: readonly AuditEntry[] = this.#entries): { ok: boolean; brokenAt?: number } {
+    const broken = this.brokenEntries(entries);
+    return broken.length === 0 ? { ok: true } : { ok: false, brokenAt: broken[0] };
+  }
+
+  /** Every entry whose hash or back-link doesn't check out. Each tampered entry shows up on its own. */
+  brokenEntries(entries: readonly AuditEntry[] = this.#entries): number[] {
+    const broken: number[] = [];
     let prev = GENESIS;
     for (const e of entries) {
-      if (e.prevHash !== prev || hashEntry(e) !== e.hash) return { ok: false, brokenAt: e.seq };
+      if (e.prevHash !== prev || hashEntry(e) !== e.hash) broken.push(e.seq);
       prev = e.hash;
     }
-    return { ok: true };
+    return broken;
   }
 }

@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { decryptText } from '../src/aead';
-import { DAY_MS, FamilyTrust, type TrustEvent } from '../src/trust';
+import { DAY_MS, FamilyTrust, type FamilyTrustOptions, type TrustEvent } from '../src/trust';
 import { MemberDevice } from '../src/zk';
 
-function setup() {
+function setup(extra: Partial<FamilyTrustOptions> = {}) {
   const clock = { t: 1_000_000 };
   const seen: { session?: string } = {};
   const events: TrustEvent[] = [];
   const trust = new FamilyTrust({
+    ...extra,
     familyId: 'kim',
     members: [
       { id: 'mom', name: '엄마', role: 'parent' },
@@ -52,8 +53,8 @@ test('neither the FA server nor the guardian alone can open a linked session', a
   for (const r of results) assert.match(r, /not enough shares/);
 });
 
-test('an impostor phone cannot approve, and a proof cannot be replayed', async () => {
-  const { trust, mom, son } = setup();
+test('an impostor phone cannot approve, and a proof cannot be replayed (hold-first mode)', async () => {
+  const { trust, mom, son } = setup({ impostorStrikeLimit: 2 });
   await trust.linkAccount('mom', 'netflix', 'cookie=abc');
   const a = await trust.request(son, { owner: 'mom', kind: 'cancel_subscription', service: 'netflix' });
   await trust.approveWith(new MemberDevice('mom'), a.id);
@@ -97,8 +98,8 @@ test('a transfer with too few eligible approvers is blocked', async () => {
   assert.equal(a.status, 'blocked');
 });
 
-test('impostor approval: hold + family alert + sealed evidence, a second attempt locks down', async () => {
-  const { trust, mom, dad, events } = setup();
+test('impostor approval (hold-first mode): hold + family alert + sealed evidence, a second attempt self-destructs', async () => {
+  const { trust, mom, dad, events } = setup({ impostorStrikeLimit: 2 });
   await trust.linkAccount('mom', 'bank', 'bank-session');
   const a = await trust.request(dad, { owner: 'mom', kind: 'transfer', service: 'bank', amountKRW: 500_000, payee: '아빠 계좌', payeeOwner: 'dad', summary: '엄마 → 아빠 50만원' });
   assert.equal(a.status, 'pending');
@@ -116,7 +117,8 @@ test('impostor approval: hold + family alert + sealed evidence, a second attempt
   await trust.approve(a.id, 'mom', new MemberDevice('mom').prove(trust.context('mom', 'approve', a.id)));
   assert.equal(a.status, 'cancelled');
   assert.equal(trust.linkedAccounts().length, 0);
-  assert.ok(events.some((e) => e.type === 'lockdown'));
+  assert.ok(events.some((e) => e.type === 'self_destruct'));
+  assert.equal(trust.frozen, true);
 });
 
 test('a non-member request is blocked and sealed as evidence', async () => {

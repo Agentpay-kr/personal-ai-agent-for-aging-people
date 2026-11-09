@@ -13,6 +13,7 @@ const TYPES = {
   evidence: ['🧾', '증거 봉인'],
   proof_failed: ['🎭', '사칭 차단'],
   lockdown: ['🔒', '긴급 잠금'],
+  self_destruct: ['💥', '자동 소멸'],
   unlocked: ['🔓', '잠금 해제'],
   linked: ['🔑', '계정 연결'],
   rejected: ['🛑', '취소'],
@@ -73,7 +74,13 @@ document.addEventListener('keydown', (event) => {
 });
 
 function status() {
-  const lastLock = events.slice().reverse().find((e) => e.type === 'lockdown' || e.type === 'unlocked');
+  const lastLock = events
+    .slice()
+    .reverse()
+    .find((e) => e.type === 'lockdown' || e.type === 'self_destruct' || e.type === 'unlocked');
+  if (lastLock?.type === 'self_destruct') {
+    return ['danger', '💥 외부 침해로 자동 소멸됨', '세션과 기억을 지웠어요. 남은 건 봉인된 증거와 감사 기록뿐이에요.'];
+  }
   if (lastLock?.type === 'lockdown') return ['danger', '🔒 긴급 잠금 중', '가족 2명이 기기로 동의하면 풀려요.'];
   const actions = snap?.actions ?? [];
   const held = actions.filter((a) => a.status === 'held');
