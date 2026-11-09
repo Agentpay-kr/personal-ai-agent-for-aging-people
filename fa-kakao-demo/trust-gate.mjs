@@ -87,7 +87,7 @@ export function createTrustGate() {
     executor(req) {
       const room = actionRooms.get(req.id);
       if (!room || retiredRooms.has(room)) throw new Error('요청을 만든 채팅방이 종료됐어요.');
-      return `시뮬레이션 영수증: ${req.summary} (실제 이체 아님)`;
+      return `연습용 영수증: ${req.summary} (실제로 보내지 않음)`;
     },
   });
   trust.on((e) => {
@@ -121,10 +121,10 @@ export function createTrustGate() {
     if (votes.size < 2) return `${LABEL[actor]} 동의 ✓ · 가족 한 명이 더 동의하면 송금 잠금이 풀려요.`;
     const ok = await trust.unlockWith([...votes].map((id) => phones[id]));
     votes.clear();
-    if (!ok) return '잠금을 풀지 못했어요. 가족 두 명의 기기 증명이 필요해요.';
+    if (!ok) return '잠금을 풀지 못했어요. 가족 두 명이 각자 휴대폰으로 확인해야 해요.';
     ready = linkBank();
     await ready;
-    return '🔓 가족 2명의 기기 증명으로 송금 잠금을 풀고, 데모 은행을 새 열쇠로 연결했어요.';
+    return '🔓 가족 2명이 휴대폰으로 확인해서 송금 잠금을 풀었어요. 은행도 새로 연결했어요.';
   }
 
   function snapshot(room, actor, since) {
@@ -243,7 +243,7 @@ export function createTrustGate() {
         title: `⏳ 실행 예약 · ${a.request.summary}`,
         description: '처음 보내는 계좌라 바로 보내지 않아요. 그 사이에 가족이 확인할 수 있어요.',
         rows: [
-          row('승인', a.approvals.map((id) => `${LABEL[id]} (기기 증명 ✓)`).join(', ')),
+          row('승인', a.approvals.map((id) => `${LABEL[id]} (휴대폰 확인 ✓)`).join(', ')),
           row('남은 시간', `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`),
         ],
         actions: [
@@ -257,11 +257,11 @@ export function createTrustGate() {
 
   function executedCard(room, a) {
     return {
-      text: `✅ ${a.request.summary} 이체를 마쳤어요 (시뮬레이션). 작업 데이터는 열쇠를 지워 소멸했어요.`,
+      text: `✅ ${a.request.summary} 보내기를 마쳤어요 (연습). 처리에 쓴 정보는 바로 지웠어요.`,
       card: {
         kind: 'result',
         title: `✅ 실행 완료 · ${a.request.summary}`,
-        description: '실제 돈은 움직이지 않은 시뮬레이션이에요. 개인정보 없는 영수증만 남아요.',
+        description: '연습이라 실제 돈은 움직이지 않았어요. 개인정보 없는 영수증만 남아요.',
         rows: [
           row('승인', a.approvals.map((id) => `${LABEL[id]} ✓`).join(', ')),
           row('영수증', a.receipt ? `${String(a.receipt).slice(0, 16)}…` : '보관됨'),
@@ -340,7 +340,7 @@ export function createTrustGate() {
           if (next.status === before && ['pending', 'held'].includes(next.status)) {
             if (next.approvals.length === count) return [note(room, `이미 승인했거나 승인할 수 없는 요청이에요.`)];
             const left = Math.max(0, next.decision.approvalsRequired - next.approvals.length);
-            return [{ ...view(room, next), text: `${LABEL[actor]} 승인 ✓ (기기 증명) · ${left}명 더 승인하면 진행돼요.` }];
+            return [{ ...view(room, next), text: `${LABEL[actor]} 승인 ✓ (휴대폰 확인) · ${left}명 더 승인하면 진행돼요.` }];
           }
           break;
         }
@@ -398,7 +398,7 @@ export function createTrustGate() {
         case 'cancel': {
           const a = findAction(room, actionId);
           if (!a || !OPEN_TRANSFERS.has(a.status)) return { status: 409, body: { error: '지금 취소할 수 있는 요청이 없어요.' } };
-          if (!canCancel(a, actor)) return { status: 403, body: { error: '승인 대기 중인 요청은 계정 주인만 취소할 수 있어요.' } };
+          if (!canCancel(a, actor)) return { status: 403, body: { error: '승인을 기다리는 요청은 본인만 취소할 수 있어요.' } };
           await trust.rejectWith(phones[actor], a.id);
           notice = '송금 요청을 취소했어요.';
           break;

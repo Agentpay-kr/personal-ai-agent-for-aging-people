@@ -1,7 +1,7 @@
 import { avatar, icon, people } from './visual.mjs';
 
 const eventNames = {
-  decision: '정책 판정', family_alert: '가족 알림', approval: '기기 승인', scheduled: '실행 예약',
+  decision: '규칙 판단', family_alert: '가족 알림', approval: '기기 승인', scheduled: '실행 예약',
   executed: '실행 완료', shredded: '세션 폐기', evidence: '증거 봉인', proof_failed: '사칭 차단',
   lockdown: '긴급 잠금', self_destruct: '자동 소멸', unlocked: '잠금 해제', linked: '계정 연결',
   rejected: '요청 취소', expired: '요청 만료', member_removed: '구성원 제거',
@@ -96,12 +96,12 @@ export function renderTrustProfile({roomName, canOpenChat, snapshot, busy, notic
     ${notice || (status && error) ? `<p class="trust-notice" role="status">${esc(error || notice)}</p>` : ''}
     ${status ? `<section class="trust-profile-section"><div class="trust-section-title"><h3>처리 중인 요청</h3><span>${waiting.length}건</span></div>
         ${waiting.length ? `<ul class="trust-request-list">${waitingRows(waiting,busy)}</ul>` : '<p class="trust-empty-line">처리 중인 요청이 없어요.</p>'}</section>
-      <section class="trust-profile-section"><div class="trust-section-title"><h3>최근 보안 기록</h3><span>${snapshot.audit?.verified ? '기록 검증됨' : '기록 확인 필요'}</span></div>
+      <section class="trust-profile-section"><div class="trust-section-title"><h3>최근 보안 기록</h3><span>${snapshot.audit?.verified ? '기록이 그대로예요' : '기록을 확인해 주세요'}</span></div>
         ${recent.length ? `<ul class="trust-event-list">${recent.slice(0,3).map(eventRow).join('')}</ul>` : '<p class="trust-empty-line">이 방에 표시할 기록이 없어요.</p>'}
         ${recent.length > 3 || controls.canImpostor || facts ? `<details><summary>자세히 보기</summary>
           ${facts}
           ${recent.length > 3 ? `<ul class="trust-event-list">${recent.slice(3,10).map(eventRow).join('')}</ul>` : ''}
           ${controls.canImpostor ? command('impostor','사칭 승인 차단 시연',busy) : ''}</details>` : ''}
-      </section><p class="trust-scope-note">데모 송금에 적용돼요. 구독 해지는 계정 주인이 따로 승인해요.</p>` : ''}
+      </section><p class="trust-scope-note">데모 송금에 적용돼요. 구독 해지는 본인이 따로 승인해요.</p>` : ''}
     </div>${footer}`;
 }
