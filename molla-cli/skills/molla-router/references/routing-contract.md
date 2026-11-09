@@ -9,14 +9,14 @@ Input remains schema version 1.0. `molla capabilities` and `docs/capabilities.js
 | health / identity.get | Direct runtime health / current profile |
 | family.list / invite / join | Family membership and pending invitations |
 | task.create / list / get | Plan and inspect owner-scoped tasks |
-| task.decide | Approve, reject or cancel; approval needs ownerConfirmed and expectedActionHash |
+| task.decide | Approve, reject or cancel; approval needs ownerConfirmed, expectedActionHash and owner proof |
 | task.execute | Atomically claim and execute an approved task |
 | task.recover | After expired execution lease, mark interrupted work needs_verification |
 | memory.list / search / remember / correct / forget | Owner's memory |
 | memory.shared / share / revoke | Explicit item sharing |
 | contact.list / add / remove | Owner's contact book |
 | ontology.get | Owner's relationship/permission graph |
-| consent.set / permission.set | Owner-confirmed consent and scopes |
+| consent.set / permission.set | Consent and scopes; turning consent on and setting scopes need owner proof |
 | vm.diagnose / compose.plan / app.plan | Owner-bound ADB checks and allowed action plans |
 
 Input example:
@@ -27,7 +27,7 @@ Input example:
 
 Output is `{schema_version,ok,operation,request_id?,data}` or `{schema_version,ok:false,operation,error:{code,message,retryable:false,status?}}`. Exit codes: 0 command success, 2 invalid input, 3 missing session, 4 authorization/owner decision, 5 runtime/domain failure. Task execution may return ok:true with data.status:failed: always inspect the business state. Logs and Node diagnostics go to stderr. Help/version are plain-text exceptions.
 
-DB and session are process flags, never request fields. Caller identity is resolved from a hashed opaque token in the DB. Target task owner does not change caller. Sessions are bound to a runtime ID and database path. OS filesystem access remains the local trust boundary.
+DB and session come from the host (`MOLLA_CLI_DB` / `MOLLA_SESSION_FILE` for the router launcher), never request fields. The router launcher accepts only `capabilities`, `health` and `route --input -`, and removes `MOLLA_OWNER_KEY` and `MOLLA_ALLOW_DEMO_LOGIN` from the child environment. Caller identity is resolved from a hashed opaque token in the DB. Target task owner does not change caller. Sessions are bound to a runtime ID and database path. OS filesystem access remains the local trust boundary.
 
 Approval hash comparison and decision occur under BEGIN IMMEDIATE. Execution claims prevent concurrent replay; terminal tasks return existing results. A process interruption leaves durable running state. After its 60-second lease expires, explicit recovery marks needs_verification and never sends again automatically.
 
@@ -35,4 +35,6 @@ Flow: awaiting_approval → running (approved, not executed) → explicit task.e
 
 Android settings come from the operator's MOLLA_PHONE_BINDINGS and MOLLA_ADB. Permissions and allow flags are checked before side effects. Device/recipient/action changes invalidate execution. CLI cannot rent cloud devices, sign into apps, transfer funds, auto-send SMS or auto-pay.
 
-This package contains its runtime source; it does not import from the sibling app. No LLM is required. An external router may use a model to select an operation, but the model cannot supply session authority or bypass owner approval.
+Owner proof. `ownerConfirmed: true` states intent only. Approve, consent active, permission.set, memory.share and contact.add additionally need proof from the owner's channel: (1) an interactive terminal where the person types back a one-time code, or (2) `ownerToken`, an HMAC minted by the owner's app with `MOLLA_OWNER_KEY` and bound to actor, operation and subject (for approvals: task id + action hash), valid for 5 minutes. Routed calls (no TTY, no key) get `OWNER_CONFIRMATION_REQUIRED` (exit 4). `demo login` needs a terminal or `MOLLA_ALLOW_DEMO_LOGIN=1` (test setups only).
+
+This package contains its runtime source; it does not import from the sibling app. No LLM is required. An external router may use a model to select an operation, but the model cannot supply session authority or owner proof, so it cannot approve on the owner's behalf.

@@ -1,5 +1,6 @@
-import { readFile, mkdir, writeFile, chmod } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, chmod, lstat, rename, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { requireOwnerProof, ownerSubject, mintOwnerToken, defaultIo } from './owner.mjs';
 import { randomBytes, createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -16,8 +17,16 @@ import { phoneBinding, adbPath } from '../runtime/phone.mjs';
 export { CliError } from './errors.mjs';
 export const actionHash=fingerprint;
 const digest=v=>createHash('sha256').update(v).digest('hex');
+// Never follow a planted symlink or overwrite a non-session file: write a private temp file, then rename.
+async function writeSessionFile(path,content){
+ const existing=await lstat(path).catch(()=>null);
+ if(existing&&!existing.isFile())throw new CliError('Session path exists and is not a regular file. Choose another --session path.','USAGE',2);
+ const tmp=`${path}.${randomBytes(6).toString('hex')}.tmp`;
+ try{await writeFile(tmp,content,{mode:0o600,flag:'wx'});await chmod(tmp,0o600);await rename(tmp,path);}
+ catch(e){await rm(tmp,{force:true});throw e;}
+}
 export class Client {
- constructor({db=process.env.MOLLA_CLI_DB||'.local/molla.sqlite',session=process.env.MOLLA_SESSION_FILE||'.local/session.json',env=process.env}={}){this.dbPath=resolve(db);this.sessionPath=resolve(session);this.env=env;this.store=null;}
+ constructor({db=process.env.MOLLA_CLI_DB||'.local/molla.sqlite',session=process.env.MOLLA_SESSION_FILE||'.local/session.json',env=process.env,io=defaultIo()}={}){this.dbPath=resolve(db);this.sessionPath=resolve(session);this.env=env;this.io=io;this.store=null;}
  open(){return this.store??=new Store(this.dbPath);}
  close(){this.store?.close();this.store=null;}
  async actor(){
@@ -31,14 +40,34 @@ export class Client {
   const store=this.open();member(store.read(),actor);const token=randomBytes(32).toString('hex');
   store.db.prepare('INSERT INTO cli_sessions VALUES(?,?,?)').run(digest(token),actor,Date.now()+86400000);
   await mkdir(dirname(this.sessionPath),{recursive:true,mode:0o700});
-  await writeFile(this.sessionPath,JSON.stringify({version:2,db:this.dbPath,runtime_id:store.runtimeId,token})+'\n',{mode:0o600});await chmod(this.sessionPath,0o600);
+  await writeSessionFile(this.sessionPath,JSON.stringify({version:2,db:this.dbPath,runtime_id:store.runtimeId,token})+'\n');
   return {identity:store.read().members.find(m=>m.id===actor),mode:'local-cli-demo',session_file:this.sessionPath,warning:'Local demo profiles are not production authentication.'};
  }
+ // For the owner's own app (holds MOLLA_OWNER_KEY): mint a token for one exact decision.
+ async ownerToken(operation,input={}){
+  try{
+   const args=validate(operation,{...input,...(operation==='task.decide'?{decision:'approve'}:{})});const actor=await this.actor();
+   if(operation==='task.decide'){const t=this.ownTask(actor,args.id);args.expectedActionHash=actionHash(t);}
+   const subject=ownerSubject(operation,args);if(!subject)throw new CliError('This operation does not need an owner token.');
+   return {operation,owner:actor,subject,owner_token:mintOwnerToken(this.env,{actor,operation,subject}),expires_in_seconds:300};
+  }catch(e){throw asCliError(e);}
+ }
+ ownTask(actor,taskId){const t=this.open().read().tasks.find(t=>t.id===taskId);if(!t)throw new DomainError('작업을 찾을 수 없어요.',404);own(actor,t.owner);return t;}
  async run(operation,input={}){
   try{
    const args=validate(operation,input),store=this.open();
    if(operation==='health')return {ok:true,mode:'local-cli',transport:'direct-process',http_server_required:false,browser_required:false,production_auth:false};
    const actor=await this.actor();
+   if(ownerSubject(operation,args)){
+    // Decisions a router must not make alone: prove the owner decided before touching state.
+    let summary=`${operation} ${JSON.stringify(Object.fromEntries(Object.entries(args).filter(([k])=>k!=='ownerToken')))}`;
+    if(operation==='task.decide'){
+     const t=this.ownTask(actor,args.id);
+     if(!/^([a-f0-9]{64})$/.test(args.expectedActionHash||'')||actionHash(t)!==args.expectedActionHash)throw new CliError('Reviewed action changed. Ask the owner to review it again.','APPROVAL_CHANGED',4);
+     summary=[`요청: ${t.title||t.text}`,`내용: ${t.action?.body??''}`,t.action?.recipient?`받는 사람: ${t.action.recipient.name??''} ${t.action.recipient.phone??''}`:null,t.action?.device?`기기: ${t.action.device.serial}`:null].filter(Boolean).join('\n');
+    }
+    await requireOwnerProof({operation,args,actor,summary,env:this.env,io:this.io});
+   }
    if(operation==='vm.diagnose'){
     const state=store.read();if(member(state,actor).consent!=='active')throw new DomainError('소유자의 동의가 필요해요.',403);
     const binding=phoneBinding(actor,this.env);if(!binding)throw new DomainError('이 소유자에게 연결된 Android VM이 없어요.',409);

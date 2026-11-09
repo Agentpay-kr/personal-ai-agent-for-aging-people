@@ -10,7 +10,7 @@
 2. 로컬 DB와 테스트 프로필을 준비하고 `identity get`으로 현재 주체를 확인합니다.
 3. 작업을 `task create`로 등록합니다.
 4. `task get`으로 정확한 action을 주인에게 보여주고 결정받습니다.
-5. `task decide`로 승인한 후 별도로 `task execute`를 호출합니다.
+5. 주인이 자기 채널(터미널 코드 입력, 또는 `MOLLA_OWNER_KEY`를 가진 주인 앱의 `--owner-token`)로 승인한 뒤 `task execute`를 호출합니다. 라우터 경로의 승인은 `OWNER_CONFIRMATION_REQUIRED`로 거절돼요.
 6. `task get`의 status/evidence/result를 보고합니다.
 
 JSON 호출은 `docs/router-example.mjs`를 사용합니다. DB 경로, 세션 경로, CLI 경로는 호스트가 정하며 모델 입력에 넣지 않습니다. actor는 세션 토큰의 DB 기록에서 결정합니다. 가족이 다른 사람의 작업을 승인할 수 없습니다.
