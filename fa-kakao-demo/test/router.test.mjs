@@ -133,7 +133,10 @@ test('concurrent approval requests consume only one approval', async (t) => {
 test('bank transfers, forged fields, and room audience changes cannot authorize work', async (t) => {
   const createRoom = await demo(t);
   const room = createRoom();
-  assert.equal((await room.act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘')).card.kind, 'blocked');
+  // A transfer never runs on the request alone: it waits for the FA engine's family multisig.
+  const transfer = await createRoom().act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
+  assert.equal(transfer.card.kind, 'approval');
+  assert.equal(transfer.state.phase, 'awaiting-cosign');
   const absent = await createRoom(['son', 'fa']).act('son', 'chat', '엄마 구독 보여줘');
   assert.match(absent.messages[0].text, /엄마를.*초대/);
   await connect(room);
@@ -155,4 +158,47 @@ test('a selectable guest can chat without obtaining VM permissions', async (t) =
   const denied = await room.act('aunt', 'chat', '엄마 구독 목록 보여줘');
   assert.equal(denied.state.phase, 'ready');
   assert.match(denied.messages[0].text, /조회할 권한이 없어요/);
+});
+
+test('FA engine family multisig: owner + one co-signer; requester and beneficiary cannot sign', async (t) => {
+  const room = (await demo(t))();
+  const asked = await room.act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
+  assert.match(asked.messages[0].text, /엄마 승인과 가족 1명\(아들\)의 승인이 모두 필요해요/);
+  assert.match(asked.messages[0].text, /아빠는 돈을 받는 사람이라/);
+  const id = asked.card.actions[0].value;
+  assert.deepEqual(asked.card.actions.map(({ action, actor }) => [action, actor ?? null]),
+    [['cosign', 'mom'], ['cosign', 'son'], ['deny', null]]);
+
+  const self = await room.send('dad', 'cosign', id);
+  assert.match(self.messages[0].text, /돈을 받는 사람은 승인할 수 없어요/);
+  assert.equal(self.state.phase, 'awaiting-cosign');
+
+  const busy = await room.act('son', 'chat', '엄마 구독 좀 정리해줘');
+  assert.match(busy.messages[0].text, /송금 승인을 먼저 마무리/);
+
+  const momOk = await room.act('mom', 'cosign', id);
+  assert.equal(momOk.state.phase, 'awaiting-cosign');
+  assert.deepEqual(momOk.card.actions.map(({ actor }) => actor ?? null), ['son', null]);
+
+  const done = await room.act('son', 'cosign', id);
+  assert.equal(done.card.kind, 'result');
+  assert.equal(done.card.title, '송금 초안 준비 완료');
+  assert.equal(done.state.phase, 'idle');
+
+  const stale = await room.send('mom', 'cosign', id);
+  assert.notEqual(stale.messages[0]?.card?.kind, 'result');
+});
+
+test('FA engine blocks transfers it cannot co-sign and family members without the right', async (t) => {
+  const createRoom = await demo(t);
+  const noCosigner = await createRoom(['mom', 'dad', 'fa']).act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
+  assert.equal(noCosigner.card.kind, 'blocked');
+  assert.match(noCosigner.card.description, /함께 승인할 가족이 이 방에 없어요/);
+  const outside = await createRoom().act('son', 'chat', '엄마 계좌에서 10만원 송금해줘');
+  assert.equal(outside.card.kind, 'blocked');
+  assert.match(outside.card.description, /가족이 아닌 계좌/);
+  const rejected = createRoom();
+  const asked = await rejected.act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
+  const no = await rejected.act('mom', 'deny', asked.card.actions[0].value);
+  assert.equal(no.card.title, '송금하지 않음');
 });
