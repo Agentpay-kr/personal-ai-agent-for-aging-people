@@ -93,14 +93,14 @@ export function failClosedVerdict(kind: ActionKind, error: unknown): JudgeVerdic
     ? {
         verdict: 'hold',
         risk: 1,
-        reasons: ['AI 심판의 판정을 받지 못해서 안전하게 보류했어요.'],
+        reasons: ['AI 확인 결과를 받지 못해서 안전하게 보류했어요.'],
         signals: ['judge_unavailable'],
         model: `fail-closed (${why})`,
       }
     : {
         verdict: 'pass',
         risk: 0.5,
-        reasons: ['AI 심판의 판정을 받지 못했지만 조회라서 규칙대로 진행해요.'],
+        reasons: ['AI 확인 결과를 받지 못했지만 보기만 하는 일이라 규칙대로 진행해요.'],
         signals: ['judge_unavailable'],
         model: `fail-open-read (${why})`,
       };
@@ -131,7 +131,7 @@ export function combineWithJudge(
       decision: {
         ...rules,
         outcome: 'block',
-        reasons: [tag, '⛔ 실행하지 않고 막았어요.', ...why, '가족 모두에게 알리고 기록을 봉인했어요.'],
+        reasons: [tag, '⛔ 실행하지 않고 막았어요.', ...why, '가족 모두에게 알리고 기록을 잠가서 보관했어요.'],
         notifyFamily: true,
         sealEvidence: true,
       },
@@ -240,10 +240,10 @@ export const heuristicJudge: Judge = async (input) => {
     flag(blocks, 'actor_mismatch', '메시지를 보낸 사람과 실행을 요청한 사람이 달라요.');
   }
   if (m.owner && m.owner !== req.owner) {
-    flag(blocks, 'owner_mismatch', '라우터가 정한 계정 주인과 실제 실행 대상이 달라요.');
+    flag(blocks, 'owner_mismatch', '처음에 알아들은 계정 주인과 실제로 쓰려는 계정이 달라요.');
   }
   if (sideEffect && m.intent && READ_INTENTS.has(m.intent)) {
-    flag(blocks, 'intent_mismatch', `라우터는 "${m.intent}"(조회·대화)로 분류했는데 실제로는 돈이나 계정을 바꾸려 해요.`);
+    flag(blocks, 'intent_mismatch', `처음에는 "${m.intent}"(보기·대화)로 알아들었는데 실제로는 돈이나 계정을 바꾸려 해요.`);
   }
   if (MANIPULATION.test(text)) {
     flag(blocks, 'prompt_injection', '메시지 안에 AI에게 규칙을 무시하라는 문장이 있어요.');
@@ -255,7 +255,7 @@ export const heuristicJudge: Judge = async (input) => {
     flag(holds, 'transfer_during_call', '통화 중에 들어온 송금 요청이에요. 사기범은 전화를 끊지 못하게 한 채 이체를 시켜요.');
   }
   if (sideEffect && typeof m.confidence === 'number' && m.confidence < 0.5) {
-    flag(holds, 'low_router_confidence', '라우터가 누구의 일인지 확신하지 못했어요.');
+    flag(holds, 'low_router_confidence', '누구의 일인지 확실하지 않아요.');
   }
   if (req.requester !== req.owner && m.deviceVerified === false) {
     flag(holds, 'unverified_device', '등록된 기기에서 온 요청이 아니에요.');

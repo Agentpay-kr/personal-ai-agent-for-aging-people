@@ -131,7 +131,7 @@ function detectSignals(req, policy = DEFAULT_POLICY, requesterVerified = false) 
     signals.push({ id: "self_dealing", label: "\uC694\uCCAD\uD55C \uC0AC\uB78C \uBCF8\uC778 \uACC4\uC88C\uB85C \uC774\uCCB4", severity: "medium", evidence: req.payeeOwner });
   }
   if (req.requester !== req.owner && !requesterVerified) {
-    signals.push({ id: "unverified_requester", label: "\uB4F1\uB85D\uB41C \uAE30\uAE30\uC758 \uC99D\uBA85\uC774 \uC5C6\uB294 \uC694\uCCAD", severity: "high", evidence: req.requester });
+    signals.push({ id: "unverified_requester", label: "\uB4F1\uB85D\uB41C \uD3F0\uC5D0\uC11C \uC624\uC9C0 \uC54A\uC740 \uC694\uCCAD", severity: "high", evidence: req.requester });
   }
   if ((req.llmRiskScore ?? 0) >= policy.llmHoldThreshold) {
     signals.push({ id: "llm_flag", label: "AI \uBD84\uB958\uAE30\uAC00 \uC0AC\uAE30\uB85C \uC758\uC2EC", severity: "high", evidence: `score ${req.llmRiskScore}` });
@@ -160,7 +160,7 @@ function evaluate(req, opts = {}) {
       reasons: [
         `\u26D4 "${forbidden}"${josa(forbidden, "\uC740/\uB294")} FA\uAC00 \uB204\uAD6C\uC758 \uC2B9\uC778\uC73C\uB85C\uB3C4 \uC2E4\uD589\uD558\uC9C0 \uC54A\uB294 \uC791\uC5C5\uC774\uC5D0\uC694. \uC2E4\uC81C \uC0AC\uAE30\uC5D0\uC11C \uAC00\uC7A5 \uB9CE\uC774 \uC4F0\uC774\uB294 \uC218\uBC95\uC774\uC5D0\uC694.`,
         ...signals.length > 0 ? ["\uD568\uAED8 \uBC1C\uACAC\uB41C \uC2E0\uD638:", ...signalLines] : [],
-        "\uAC00\uC871 \uBAA8\uB450\uC5D0\uAC8C \uC54C\uB9AC\uACE0 \uAE30\uB85D\uC744 \uBD09\uC778\uD588\uC5B4\uC694."
+        "\uAC00\uC871 \uBAA8\uB450\uC5D0\uAC8C \uC54C\uB9AC\uACE0 \uAE30\uB85D\uC744 \uC7A0\uAC00\uC11C \uBCF4\uAD00\uD588\uC5B4\uC694."
       ],
       notifyFamily: true,
       sealEvidence: true
@@ -234,7 +234,7 @@ function evaluate(req, opts = {}) {
   const needsSecond = !byOwner || newPayee || large;
   const coolingOffMinutes = newPayee ? policy.newPayeeCoolingOffMinutes : 0;
   const reasons = [
-    needsSecond ? `\u{1F510} "${what}"${josa(what, "\uC740/\uB294")} \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uC5B4\uC11C ${name(req.owner)} \uBCF8\uC778 \uC2B9\uC778 + \uAC00\uC871 1\uBA85 \uD655\uC778(2-of-3)\uC774 \uD544\uC694\uD574\uC694.` : `\u{1F510} "${what}"${josa(what, "\uC740/\uB294")} \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uC5B4\uC11C ${name(req.owner)} \uBCF8\uC778 \uC2B9\uC778\uC774 \uD544\uC694\uD574\uC694.`
+    needsSecond ? `\u{1F510} "${what}"${josa(what, "\uC740/\uB294")} \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uC5B4\uC11C ${name(req.owner)} \uBCF8\uC778 \uC2B9\uC778 + \uAC00\uC871 1\uBA85 \uD655\uC778\uC774 \uD544\uC694\uD574\uC694.` : `\u{1F510} "${what}"${josa(what, "\uC740/\uB294")} \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uC5B4\uC11C ${name(req.owner)} \uBCF8\uC778 \uC2B9\uC778\uC774 \uD544\uC694\uD574\uC694.`
   ];
   if (selfDealing) {
     reasons.push(
@@ -1136,13 +1136,13 @@ function failClosedVerdict(kind, error) {
   return SIDE_EFFECT_KINDS.has(kind) ? {
     verdict: "hold",
     risk: 1,
-    reasons: ["AI \uC2EC\uD310\uC758 \uD310\uC815\uC744 \uBC1B\uC9C0 \uBABB\uD574\uC11C \uC548\uC804\uD558\uAC8C \uBCF4\uB958\uD588\uC5B4\uC694."],
+    reasons: ["AI \uD655\uC778 \uACB0\uACFC\uB97C \uBC1B\uC9C0 \uBABB\uD574\uC11C \uC548\uC804\uD558\uAC8C \uBCF4\uB958\uD588\uC5B4\uC694."],
     signals: ["judge_unavailable"],
     model: `fail-closed (${why})`
   } : {
     verdict: "pass",
     risk: 0.5,
-    reasons: ["AI \uC2EC\uD310\uC758 \uD310\uC815\uC744 \uBC1B\uC9C0 \uBABB\uD588\uC9C0\uB9CC \uC870\uD68C\uB77C\uC11C \uADDC\uCE59\uB300\uB85C \uC9C4\uD589\uD574\uC694."],
+    reasons: ["AI \uD655\uC778 \uACB0\uACFC\uB97C \uBC1B\uC9C0 \uBABB\uD588\uC9C0\uB9CC \uBCF4\uAE30\uB9CC \uD558\uB294 \uC77C\uC774\uB77C \uADDC\uCE59\uB300\uB85C \uC9C4\uD589\uD574\uC694."],
     signals: ["judge_unavailable"],
     model: `fail-open-read (${why})`
   };
@@ -1160,7 +1160,7 @@ function combineWithJudge(rules, judge, opts = {}) {
       decision: {
         ...rules,
         outcome: "block",
-        reasons: [tag, "\u26D4 \uC2E4\uD589\uD558\uC9C0 \uC54A\uACE0 \uB9C9\uC558\uC5B4\uC694.", ...why, "\uAC00\uC871 \uBAA8\uB450\uC5D0\uAC8C \uC54C\uB9AC\uACE0 \uAE30\uB85D\uC744 \uBD09\uC778\uD588\uC5B4\uC694."],
+        reasons: [tag, "\u26D4 \uC2E4\uD589\uD558\uC9C0 \uC54A\uACE0 \uB9C9\uC558\uC5B4\uC694.", ...why, "\uAC00\uC871 \uBAA8\uB450\uC5D0\uAC8C \uC54C\uB9AC\uACE0 \uAE30\uB85D\uC744 \uC7A0\uAC00\uC11C \uBCF4\uAD00\uD588\uC5B4\uC694."],
         notifyFamily: true,
         sealEvidence: true
       },
@@ -1256,10 +1256,10 @@ var heuristicJudge = async (input) => {
     flag(blocks, "actor_mismatch", "\uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0B8 \uC0AC\uB78C\uACFC \uC2E4\uD589\uC744 \uC694\uCCAD\uD55C \uC0AC\uB78C\uC774 \uB2EC\uB77C\uC694.");
   }
   if (m.owner && m.owner !== req.owner) {
-    flag(blocks, "owner_mismatch", "\uB77C\uC6B0\uD130\uAC00 \uC815\uD55C \uACC4\uC815 \uC8FC\uC778\uACFC \uC2E4\uC81C \uC2E4\uD589 \uB300\uC0C1\uC774 \uB2EC\uB77C\uC694.");
+    flag(blocks, "owner_mismatch", "\uCC98\uC74C\uC5D0 \uC54C\uC544\uB4E4\uC740 \uACC4\uC815 \uC8FC\uC778\uACFC \uC2E4\uC81C\uB85C \uC4F0\uB824\uB294 \uACC4\uC815\uC774 \uB2EC\uB77C\uC694.");
   }
   if (sideEffect && m.intent && READ_INTENTS.has(m.intent)) {
-    flag(blocks, "intent_mismatch", `\uB77C\uC6B0\uD130\uB294 "${m.intent}"(\uC870\uD68C\xB7\uB300\uD654)\uB85C \uBD84\uB958\uD588\uB294\uB370 \uC2E4\uC81C\uB85C\uB294 \uB3C8\uC774\uB098 \uACC4\uC815\uC744 \uBC14\uAFB8\uB824 \uD574\uC694.`);
+    flag(blocks, "intent_mismatch", `\uCC98\uC74C\uC5D0\uB294 "${m.intent}"(\uBCF4\uAE30\xB7\uB300\uD654)\uB85C \uC54C\uC544\uB4E4\uC5C8\uB294\uB370 \uC2E4\uC81C\uB85C\uB294 \uB3C8\uC774\uB098 \uACC4\uC815\uC744 \uBC14\uAFB8\uB824 \uD574\uC694.`);
   }
   if (MANIPULATION.test(text)) {
     flag(blocks, "prompt_injection", "\uBA54\uC2DC\uC9C0 \uC548\uC5D0 AI\uC5D0\uAC8C \uADDC\uCE59\uC744 \uBB34\uC2DC\uD558\uB77C\uB294 \uBB38\uC7A5\uC774 \uC788\uC5B4\uC694.");
@@ -1271,7 +1271,7 @@ var heuristicJudge = async (input) => {
     flag(holds, "transfer_during_call", "\uD1B5\uD654 \uC911\uC5D0 \uB4E4\uC5B4\uC628 \uC1A1\uAE08 \uC694\uCCAD\uC774\uC5D0\uC694. \uC0AC\uAE30\uBC94\uC740 \uC804\uD654\uB97C \uB04A\uC9C0 \uBABB\uD558\uAC8C \uD55C \uCC44 \uC774\uCCB4\uB97C \uC2DC\uCF1C\uC694.");
   }
   if (sideEffect && typeof m.confidence === "number" && m.confidence < 0.5) {
-    flag(holds, "low_router_confidence", "\uB77C\uC6B0\uD130\uAC00 \uB204\uAD6C\uC758 \uC77C\uC778\uC9C0 \uD655\uC2E0\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694.");
+    flag(holds, "low_router_confidence", "\uB204\uAD6C\uC758 \uC77C\uC778\uC9C0 \uD655\uC2E4\uD558\uC9C0 \uC54A\uC544\uC694.");
   }
   if (req.requester !== req.owner && m.deviceVerified === false) {
     flag(holds, "unverified_device", "\uB4F1\uB85D\uB41C \uAE30\uAE30\uC5D0\uC11C \uC628 \uC694\uCCAD\uC774 \uC544\uB2C8\uC5D0\uC694.");
@@ -3648,7 +3648,7 @@ var FamilyTrust = class {
     if (!isMember) {
       decision = blocked("\uB4F1\uB85D\uB41C \uAC00\uC871 \uAE30\uAE30\uAC00 \uC544\uB2CC \uACF3\uC5D0\uC11C \uC628 \uC694\uCCAD\uC774\uB77C \uCC98\uB9AC\uD558\uC9C0 \uC54A\uC558\uC5B4\uC694.", true);
     } else if (this.#frozen && request.kind !== "read") {
-      decision = blocked("\u{1F512} \uAE34\uAE09 \uC7A0\uAE08 \uC911\uC774\uB77C \uC870\uD68C \uB9D0\uACE0\uB294 \uC544\uBB34\uAC83\uB3C4 \uC2E4\uD589\uD558\uC9C0 \uC54A\uC544\uC694. \uAC00\uC871 2\uBA85\uC774 \uAE30\uAE30\uB85C \uD574\uC81C\uD574\uC57C \uD574\uC694.", false);
+      decision = blocked("\u{1F512} \uAE34\uAE09 \uC7A0\uAE08 \uC911\uC774\uB77C \uBCF4\uB294 \uAC83 \uB9D0\uACE0\uB294 \uC544\uBB34\uAC83\uB3C4 \uC2E4\uD589\uD558\uC9C0 \uC54A\uC544\uC694. \uAC00\uC871 2\uBA85\uC774 \uB4F1\uB85D\uB41C \uD3F0\uC73C\uB85C \uD480\uC5B4\uC57C \uD574\uC694.", false);
     } else {
       decision = evaluate(request, { requesterVerified: verified, policy: this.#policy, names: this.#names() });
     }
@@ -3683,7 +3683,7 @@ var FamilyTrust = class {
           ...decision,
           reasons: [
             ...decision.reasons,
-            `\u{1F6AB} ${excludedNames}${josa(excludedNames, "\uC740/\uB294")} \uC694\uCCAD\uD588\uAC70\uB098 \uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC774\uB77C \uC2B9\uC778\uC790\uB85C \uC140 \uC218 \uC5C6\uC5B4\uC694. ${eligible.map((m) => this.name(m)).join("\xB7")} \uC911 ${decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uC2B9\uC778\uC774 \uD544\uC694\uD574\uC694.`
+            `\u{1F6AB} ${excludedNames}${josa(excludedNames, "\uC740/\uB294")} \uC694\uCCAD\uD588\uAC70\uB098 \uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC774\uB77C \uC2B9\uC778\uD560 \uC218 \uC5C6\uC5B4\uC694. ${eligible.map((m) => this.name(m)).join("\xB7")} \uC911 ${decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uC2B9\uC778\uC774 \uD544\uC694\uD574\uC694.`
           ]
         };
       }
@@ -3727,7 +3727,7 @@ var FamilyTrust = class {
       this.audit.append("proof_failed", memberId, "\uC2B9\uC778 \uAE30\uAE30 \uC99D\uBA85 \uC2E4\uD328", { requestId });
       this.#emit(
         "proof_failed",
-        `\u26A0\uFE0F "${this.name(memberId)}" \uC774\uB984\uC73C\uB85C \uC2B9\uC778\uC774 \uC654\uC9C0\uB9CC \uB4F1\uB85D\uB41C \uAE30\uAE30\uC758 ZK \uC99D\uBA85\uC774 \uC544\uB2C8\uC5D0\uC694. \uBB34\uC2DC\uD558\uACE0 \uAE30\uB85D\uD588\uC5B4\uC694.`,
+        `\u26A0\uFE0F "${this.name(memberId)}" \uC774\uB984\uC73C\uB85C \uC2B9\uC778\uC774 \uC654\uC9C0\uB9CC \uB4F1\uB85D\uB41C \uD3F0\uC5D0\uC11C \uC628 \uAC8C \uC544\uB2C8\uC5D0\uC694. \uBB34\uC2DC\uD558\uACE0 \uAE30\uB85D\uD588\uC5B4\uC694.`,
         requestId
       );
       await this.#onImpostor(a, memberId);
@@ -3756,7 +3756,7 @@ var FamilyTrust = class {
     this.audit.append("approval", memberId, `\uC2B9\uC778: ${a.request.summary ?? a.request.kind}`, { requestId });
     this.#emit(
       "approval",
-      `\u{1F44D} ${this.name(memberId)} \uC2B9\uC778 (${a.approvals.length}/${Math.max(1, a.decision.approvalsRequired)}) \xB7 \u{1F510} \uAE30\uAE30 \uC99D\uBA85\uB428`,
+      `\u{1F44D} ${this.name(memberId)} \uC2B9\uC778 (${a.approvals.length}/${Math.max(1, a.decision.approvalsRequired)}) \xB7 \u{1F510} \uB4F1\uB85D\uB41C \uD3F0 \uD655\uC778\uB428`,
       requestId
     );
     await this.#progress(a);
@@ -3800,7 +3800,7 @@ var FamilyTrust = class {
         this.audit.append("session_expired", "system", `${link.owner}/${link.service} \uC138\uC158 \uAE30\uD55C \uB9CC\uB8CC \u2192 \uC18C\uBA78`);
         this.#emit(
           "expired",
-          `\u23F3 ${this.name(link.owner)}\uC758 ${serviceLabel(link.service)} \uC5F0\uACB0\uC774 \uAE30\uD55C\uC774 \uC9C0\uB098 \uC2A4\uC2A4\uB85C \uC18C\uBA78\uD588\uC5B4\uC694. \uD544\uC694\uD558\uBA74 \uB2E4\uC2DC \uC5F0\uACB0\uD558\uC138\uC694.`
+          `\u23F3 ${this.name(link.owner)}\uC758 ${serviceLabel(link.service)} \uC5F0\uACB0\uC774 \uAE30\uD55C\uC774 \uC9C0\uB098 \uC800\uC808\uB85C \uB04A\uACBC\uC5B4\uC694. \uD544\uC694\uD558\uBA74 \uB2E4\uC2DC \uC5F0\uACB0\uD558\uC138\uC694.`
         );
       }
     }
@@ -3852,7 +3852,7 @@ var FamilyTrust = class {
       [
         `\u2705 ${this.name(owner)}\uC758 ${serviceLabel(service)} \uC5F0\uACB0 \uC644\uB8CC`,
         `\u{1F510} \uC5F4\uC1E0 3\uC870\uAC01(${this.name(owner)} \uD3F0 / FA \uC11C\uBC84 / ${this.name(guardian)} \uD3F0) \uC911 2\uAC1C\uAC00 \uBAA8\uC5EC\uC57C \uC5F4\uB824\uC694`,
-        `\u23F3 ${ttlDays}\uC77C \uB4A4 \uC790\uB3D9 \uC18C\uBA78 \xB7 \uBE44\uBC00\uBC88\uD638\uB294 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC544\uC694`
+        `\u23F3 ${ttlDays}\uC77C \uB4A4 \uC800\uC808\uB85C \uB04A\uACA8\uC694 \xB7 \uBE44\uBC00\uBC88\uD638\uB294 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC544\uC694`
       ].join("\n")
     );
     return this.linkedAccounts().find((l) => l.slot === slot);
@@ -3901,10 +3901,10 @@ var FamilyTrust = class {
       "lockdown",
       [
         `\u{1F512} \uAE34\uAE09 \uC7A0\uAE08 (${this.name(by)})`,
-        `\u2022 \uC5F0\uACB0\uB41C \uC11C\uBE44\uC2A4 ${slots.length}\uAC1C\uC758 \uC138\uC158\uACFC \uC5F4\uC1E0 \uC870\uAC01 \uC18C\uBA78 \u2192 \uC5D0\uC774\uC804\uD2B8\uAC00 \uB354\uB294 \uC5B4\uB5A4 \uACC4\uC815\uB3C4 \uBABB \uC5F4\uC5B4\uC694`,
+        `\u2022 \uC5F0\uACB0\uB41C \uC11C\uBE44\uC2A4 ${slots.length}\uAC1C\uC758 \uC5F0\uACB0\uACFC \uC5F4\uC1E0 \uC870\uAC01\uC744 \uC9C0\uC6C0 \u2192 FA\uAC00 \uB354\uB294 \uC5B4\uB5A4 \uACC4\uC815\uB3C4 \uBABB \uC5F4\uC5B4\uC694`,
         `\u2022 \uC9C4\uD589 \uC911\uC774\uB358 \uC694\uCCAD ${cancelled}\uAC74 \uCDE8\uC18C`,
-        `\u2022 \uAC00\uC871 \uD0A4 \uC7AC\uBC1C\uAE09 (epoch ${this.keys.epoch})`,
-        "\u2022 \uD574\uC81C\uB294 \uAC00\uC871 2\uBA85\uC758 \uAE30\uAE30 \uC99D\uBA85\uC774 \uC788\uC5B4\uC57C \uD574\uC694"
+        `\u2022 \uAC00\uC871 \uC5F4\uC1E0\uB97C \uC0C8\uB85C \uB9CC\uB4E6`,
+        "\u2022 \uD478\uB294 \uAC74 \uAC00\uC871 2\uBA85\uC774 \uAC01\uC790 \uB4F1\uB85D\uB41C \uD3F0\uC73C\uB85C \uD655\uC778\uD574\uC57C \uD574\uC694"
       ].join("\n")
     );
   }
@@ -3915,7 +3915,7 @@ var FamilyTrust = class {
       if (this.verifyProof(ap.memberId, ap.proof, this.unlockContext(ap.memberId))) ok.add(ap.memberId);
     }
     if (ok.size < 2) {
-      this.#emit("unlock_denied", `\u{1F512} \uD574\uC81C\uD558\uB824\uBA74 \uC11C\uB85C \uB2E4\uB978 \uAC00\uC871 2\uBA85\uC758 \uAE30\uAE30 \uC99D\uBA85\uC774 \uD544\uC694\uD574\uC694 (${ok.size}/2).`);
+      this.#emit("unlock_denied", `\u{1F512} \uD480\uB824\uBA74 \uC11C\uB85C \uB2E4\uB978 \uAC00\uC871 2\uBA85\uC774 \uB4F1\uB85D\uB41C \uD3F0\uC73C\uB85C \uD655\uC778\uD574\uC57C \uD574\uC694 (${ok.size}/2).`);
       return false;
     }
     this.#frozen = false;
@@ -3950,7 +3950,7 @@ var FamilyTrust = class {
     const what = by === memberId ? `${name}${josa(name, "\uC774/\uAC00")} \uB098\uAC14\uC5B4\uC694` : `${remover}${josa(remover, "\uC774/\uAC00")} ${name}${josa(name, "\uC744/\uB97C")} \uB0B4\uBCF4\uB0C8\uC5B4\uC694`;
     this.#emit(
       "member_removed",
-      `\u{1F44B} ${what} \u2192 \u{1F511} \uAC00\uC871 \uD0A4 \uC7AC\uBC1C\uAE09 (epoch ${this.keys.epoch}). \uB098\uAC04 \uC0AC\uB78C\uC740 \uC774\uD6C4 \uAE30\uB85D\uC744 \uBCFC \uC218 \uC5C6\uC5B4\uC694.`
+      `\u{1F44B} ${what} \u2192 \u{1F511} \uAC00\uC871 \uC5F4\uC1E0\uB97C \uC0C8\uB85C \uB9CC\uB4E4\uC5C8\uC5B4\uC694. \uB098\uAC04 \uC0AC\uB78C\uC740 \uC774\uD6C4 \uAE30\uB85D\uC744 \uBCFC \uC218 \uC5C6\uC5B4\uC694.`
     );
   }
   // ───────────────────────── family memory (sealed under the family key) ─────────────────────────
@@ -3998,7 +3998,7 @@ var FamilyTrust = class {
           sha256(utf8(JSON.stringify({ id, owner, purpose, outcome, stored, at: this.#now() })))
         ).slice(0, 16);
         this.audit.append("task_finished", "fa_agent", `\uC791\uC5C5 \uC885\uB8CC \xB7 \uB370\uC774\uD130 ${shredded.length}\uAC74 \uC18C\uBA78`, { task: id, receipt });
-        this.#emit("shredded", `\u{1F525} \uC791\uC5C5 \uB370\uC774\uD130 ${shredded.length}\uAC74 \uC18C\uBA78 \xB7 \uB0A8\uC740 \uAC74 \uC601\uC218\uC99D #${receipt.slice(0, 8)} \uD558\uB098`);
+        this.#emit("shredded", `\u{1F525} \uC791\uC5C5 \uAE30\uB85D ${shredded.length}\uAC74\uC744 \uC9C0\uC6E0\uC5B4\uC694 \xB7 \uB0A8\uC740 \uAC74 \uC601\uC218\uC99D #${receipt.slice(0, 8)} \uD558\uB098`);
         return receipt;
       }
     };
@@ -4055,7 +4055,7 @@ var FamilyTrust = class {
     try {
       serverShare = JSON.parse(await this.vault.getText(link.serverShareRecord));
     } catch (e) {
-      if (e instanceof ShreddedError) throw new Error(`${serviceLabel(service)} \uC5F0\uACB0 \uC5F4\uC1E0\uAC00 \uC18C\uBA78\uB410\uC5B4\uC694 (${e.reason})`);
+      if (e instanceof ShreddedError) throw new Error(`${serviceLabel(service)} \uC5F0\uACB0 \uC5F4\uC1E0\uB97C \uC774\uBBF8 \uC9C0\uC6E0\uC5B4\uC694 (${e.reason})`);
       throw e;
     }
     const deviceShare = deviceShares.find((s) => s.holder !== FA_SERVER && link.holders.includes(s.holder ?? ""));
@@ -4074,7 +4074,7 @@ var FamilyTrust = class {
     if (req.payeeOwner !== void 0 && member === req.payeeOwner && member !== req.owner) {
       return "\uB3C8\uC744 \uBC1B\uB294 \uC0AC\uB78C\uC740 \uC2B9\uC778\uD560 \uC218 \uC5C6\uC5B4\uC694.";
     }
-    if (member === req.requester && member !== req.owner) return "\uC694\uCCAD\uD55C \uC0AC\uB78C\uC740 \uC2B9\uC778\uC790\uB85C \uC140 \uC218 \uC5C6\uC5B4\uC694.";
+    if (member === req.requester && member !== req.owner) return "\uC694\uCCAD\uD55C \uC0AC\uB78C\uC740 \uC2B9\uC778\uD560 \uC218 \uC5C6\uC5B4\uC694.";
     return null;
   }
   #eligibleApprovers(req) {
@@ -4104,7 +4104,7 @@ var FamilyTrust = class {
     };
     this.#emit(
       "family_alert",
-      `\u{1F468}\u200D\u{1F469}\u200D\u{1F466} \uAC00\uC871 \uC804\uCCB4 \uC54C\uB9BC: "${this.name(claimed)}" \uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4 \uAC10\uC9C0 \u2192 "${a.request.summary ?? a.request.kind}" \uBCF4\uB958${wasScheduled ? " (\uC608\uC57D \uC2E4\uD589 \uCDE8\uC18C)" : ""}. \uC774\uC81C \uAC00\uC871 ${a.decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uD655\uC778\uC774 \uD544\uC694\uD574\uC694. \uD55C \uBC88 \uB354 \uC2DC\uB3C4\uB418\uBA74 \uAE34\uAE09 \uC7A0\uAE08\uD574\uC694.`,
+      `\u{1F468}\u200D\u{1F469}\u200D\u{1F466} \uAC00\uC871 \uC804\uCCB4 \uC54C\uB9BC: "${this.name(claimed)}" \uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4 \uAC10\uC9C0 \u2192 "${a.request.summary ?? a.request.kind}" \uBCF4\uB958${wasScheduled ? " (\uC608\uC57D \uC2E4\uD589 \uCDE8\uC18C)" : ""}. \uC774\uC81C \uAC00\uC871 ${a.decision.approvalsRequired}\uBA85\uC774 \uB4F1\uB85D\uB41C \uD3F0\uC73C\uB85C \uD655\uC778\uD574\uC57C \uD574\uC694. \uD55C \uBC88 \uB354 \uC2DC\uB3C4\uB418\uBA74 \uAE34\uAE09 \uC7A0\uAE08\uD574\uC694.`,
       a.id
     );
     if (!a.evidenceId) a.evidenceId = await this.#sealEvidence(a);
@@ -4130,7 +4130,7 @@ var FamilyTrust = class {
     for (const share of ev.shares) if (share.holder) this.#deliverShare(share.holder, evidenceSlot(ev.id), share, false);
     this.#evidence.set(ev.id, { ...ev, shares: [] });
     this.audit.append("evidence_sealed", "fa_agent", `\uC99D\uAC70 \uBD09\uC778 ${ev.id}`, { requestId: a.id, commitment: ev.commitment });
-    this.#emit("evidence", "\u{1F9FE} \uC774 \uC2DC\uB3C4\uC758 \uAE30\uB85D\uC744 \uAC00\uC871 2-of-3 \uC5F4\uC1E0\uB85C \uBD09\uC778\uD588\uC5B4\uC694 (\uC790\uB3D9 \uC18C\uBA78 \uB300\uC0C1 \uC544\uB2D8 \xB7 \uC2E0\uACE0\uD560 \uB54C \uC81C\uCD9C\uC6A9).", a.id);
+    this.#emit("evidence", "\u{1F9FE} \uC774 \uC2DC\uB3C4\uC758 \uAE30\uB85D\uC744 \uAC00\uC871 \uC5F4\uC1E0\uB85C \uC7A0\uAC00\uC11C \uBCF4\uAD00\uD588\uC5B4\uC694 (\uC800\uC808\uB85C \uC9C0\uC6CC\uC9C0\uC9C0 \uC54A\uC544\uC694 \xB7 \uC2E0\uACE0\uD560 \uB54C \uB0B4\uB294 \uC6A9\uB3C4).", a.id);
     return ev.id;
   }
   async #reencryptMemory(oldKey) {

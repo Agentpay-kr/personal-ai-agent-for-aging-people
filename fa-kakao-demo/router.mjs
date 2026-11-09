@@ -35,7 +35,7 @@ const FIELDS = new Set(['demo_id', 'room_id', 'members', 'actor', 'action', 'val
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CANCEL = /(?:해지|구독\s*취소)(?:\s*(?:좀\s*)?(?:해\s*줘(?:요)?|해\s*주세요|해\s*줄래|할래|하고\s*싶어(?:요)?|요청(?:해줘|할게요)?))?[.!。！]?$/;
 const INFORMATION_QUESTION = /[?？]|방법|어떻게|뭐야|무슨 뜻|할 수 있|(?:송금|이체)\s*수수료/;
-const space = (owner) => `${LABEL[owner]}의 VM`;
+const space = (owner) => `${LABEL[owner]} 전용 공간`;
 
 function isId(value) {
   return typeof value === 'string' && UUID.test(value);
@@ -215,11 +215,11 @@ function ready(room, owner, grant) {
   room.connections.set(owner, { grant });
   transition(room, 'ready', owner, { grant });
   const name = LABEL[owner];
-  return reply(room, grant ? `${subj(name)} 아들에게 구독 목록 조회를 허용했어요.` : `${name}의 데모 계정이 연결됐어요.`, {
+  return reply(room, grant ? `${subj(name)} 아들에게 구독 목록 보기를 허락했어요.` : `${name}의 데모 계정이 연결됐어요.`, {
     kind: 'ready',
     title: '구독 목록을 확인할 수 있어요',
-    description: grant ? '조회 결과는 지금 참여 중인 가족에게 공유돼요.' : '조회 결과는 계정 주인에게만 보여요.',
-    rows: [row('허용된 범위', `${space(owner)}에서 구독 목록 조회`)],
+    description: grant ? '목록은 지금 이 방에 있는 가족에게 공유돼요.' : '목록은 계정 주인에게만 보여요.',
+    rows: [row('허락한 범위', `${space(owner)}에서 구독 목록 보기`)],
     actions: [button('scan', `${name} 구독 목록 보기`, { actors: readers(owner, grant) })],
   }, grant?.visibleTo ?? [owner]);
 }
@@ -229,11 +229,11 @@ function listCard(room, text) {
   return reply(room, text ?? `${space(owner)}에서 구독 ${list.subscriptions.length}개를 확인했어요.`, {
     kind: 'subscriptions',
     title: `${LABEL[owner]}의 구독 목록`,
-    description: 'VM 에이전트가 돌려준 샘플 목록이에요.',
+    description: '전용 공간에서 가져온 연습용 목록이에요.',
     rows: [
       row('요청한 사람', LABEL[list.actor]),
       row('작업 공간', space(owner)),
-      row('실행 권한', list.actor === owner ? '본인 조회' : '계정 주인이 허용한 목록 조회'),
+      row('볼 수 있는 이유', list.actor === owner ? '본인이 직접 봄' : '계정 주인이 허락함'),
       ...list.subscriptions.map(({ name, price }) => row(name, price)),
     ],
     actions: list.subscriptions.map(({ id, name }) => button('propose', `${name} 해지 요청`, {
@@ -270,7 +270,7 @@ function transferCard(room, text) {
   return reply(room, text, {
     kind: 'approval',
     title: `${won(p.amount)} 송금 · 가족 2명 승인 필요`,
-    description: '돈이 나가는 요청이라 계정 주인과 가족 1명이 모두 승인해야 해요. 요청한 사람과 돈을 받는 사람은 승인자가 될 수 없어요.',
+    description: '돈이 나가는 요청이라 계정 주인과 가족 1명이 모두 승인해야 해요. 요청한 사람과 돈을 받는 사람은 승인할 수 없어요.',
     rows: [
       row('요청한 사람', LABEL[p.actor]),
       row('작업 공간', space(p.owner)),
@@ -278,7 +278,7 @@ function transferCard(room, text) {
       row('금액', won(p.amount)),
       row(`${LABEL[p.owner]} 승인 (필수)`, vote(p.owner)),
       row(`가족 승인 (${cosignLabel})`, cosigned ? `${LABEL[cosigned]} 승인함` : '대기 중'),
-      row('권한 엔진', '가족 멀티시그 · fa-engine'),
+      row('규칙', '돈이 나가는 일은 가족 2명이 함께 승인'),
     ],
     actions: [
       ...p.approvals.required.filter((id) => !p.votes[id])
@@ -316,8 +316,8 @@ function decideTransfer(room, actor, vote, id) {
   if (!canVote(request, actor)) {
     if (p.votes[actor]) return reply(room, '이미 결정했어요. 남은 가족의 승인을 기다리고 있어요.');
     if (actor === p.to) return reply(room, '돈을 받는 사람은 승인할 수 없어요.');
-    if (actor === p.actor) return reply(room, '요청한 사람은 승인자로 셀 수 없어요.');
-    return reply(room, '이 송금의 승인자가 아니에요.');
+    if (actor === p.actor) return reply(room, '요청한 사람은 승인할 수 없어요.');
+    return reply(room, '이 송금을 승인할 사람이 아니에요.');
   }
   p.votes[actor] = vote;
   const state = approvalState(request);
@@ -334,10 +334,10 @@ function decideTransfer(room, actor, vote, id) {
     });
   }
   const signers = Object.keys(p.votes).filter((id) => p.votes[id] === 'approve').map((id) => LABEL[id]);
-  return reply(room, `${subj(andJoin(signers))} 승인해서 송금 초안을 준비했어요.`, {
+  return reply(room, `${subj(andJoin(signers))} 승인해서 송금 준비를 마쳤어요.`, {
     kind: 'result',
-    title: '송금 초안 준비 완료',
-    description: '데모라서 실제 이체는 하지 않았어요. 실제 서비스에서는 이 단계에서 계정 주인의 VM이 이체를 실행해요.',
+    title: '송금 준비 완료',
+    description: '데모라서 실제로 보내지는 않았어요. 실제 서비스라면 이 단계에서 계정 주인의 전용 공간이 돈을 보내요.',
     rows: [...rows, row('승인한 사람', signers.join(' · '))],
   });
 }
@@ -348,8 +348,8 @@ function decideTransfer(room, actor, vote, id) {
 function routeRows(task, reason) {
   return [
     row('요청한 사람', LABEL[task.actor]),
-    row('라우팅', `${LABEL[task.actor]} → FA → ${space(task.owner)}`),
-    row('규칙 판정', reason),
+    row('처리 순서', `${LABEL[task.actor]} → FA → ${space(task.owner)}`),
+    row('규칙', reason),
   ];
 }
 
@@ -383,7 +383,7 @@ function completeOrder(room, task, prevFlow, lead) {
     kind: 'result', title: `${task.item} 주문 준비 완료`,
     description: '데모라서 실제 결제는 하지 않았어요.',
     rows: [
-      row('요청한 사람', LABEL[task.actor]), row('실행 VM', space(task.owner)),
+      row('요청한 사람', LABEL[task.actor]), row('실행하는 곳', space(task.owner)),
       row('쿠팡 계정', `${who}의 쿠팡`), row('배송지', `${who} 집 (등록된 주소)`), row('금액', won(task.price)),
     ],
   });
@@ -439,8 +439,8 @@ function continueRoute(room, { actor, action, value, step_id, fromChat }) {
     if (task.then) return completeOrder(room, task.then, prevFlow, `${who} 쿠팡이 연결돼서 바로 이어서 `);
     return finishRoute(room, prevFlow, `${who} ${subj(svc)} ${space(task.owner)}에 연결됐어요.`, {
       kind: 'result', title: `${who} ${svc} 연결 완료`,
-      description: `비밀번호는 ${space(task.owner)} 금고에만 있어요. 가족에게도 보이지 않아요.`,
-      rows: [row('요청한 사람', LABEL[task.actor]), row('연결된 VM', space(task.owner)), row('로그인한 사람', who)],
+      description: `비밀번호는 ${space(task.owner)}의 금고에만 있어요. 가족에게도 보이지 않아요.`,
+      rows: [row('요청한 사람', LABEL[task.actor]), row('연결된 곳', space(task.owner)), row('로그인한 사람', who)],
     });
   }
   if (action === 'route_deny' || action === 'deny') {
@@ -474,7 +474,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }, all
     const routed = continueRoute(room, { actor, action, value, step_id, fromChat });
     if (routed) return routed;
   }
-  if (TRUST_ACTIONS.has(action)) return reply(room, '보안 기능(fa-trust)이 연결되지 않았어요.');
+  if (TRUST_ACTIONS.has(action)) return reply(room, '송금 보호 기능이 연결되지 않았어요.');
   // Transfer drafts only exist when the trust gate itself is unavailable.
   if (action === 'transfer') return proposeTransfer(room, actor, transfer);
   if (allowTransferFallback && room.flow.phase === 'awaiting-cosign') {
@@ -507,7 +507,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }, all
   if (['setup', 'scan', 'propose'].includes(action) && (phase === 'idle' || owner !== currentOwner)) {
     const connection = room.connections.get(owner);
     if (connection) {
-      if (!readers(owner, connection.grant).includes(actor)) return reply(room, '이 계정의 목록을 조회할 권한이 없어요.');
+      if (!readers(owner, connection.grant).includes(actor)) return reply(room, '이 계정의 목록을 볼 수 있는 허락을 받지 않았어요.');
       if (action === 'scan') return readList(room, vm, actor, owner, connection.grant);
       return ready(room, owner, connection.grant);
     }
@@ -528,7 +528,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }, all
     return reply(room, `${name}의 데모 계정이 연결됐어요. 아들이 도울 범위를 확인해 주세요.`, {
       kind: 'scope', audience: owner, title: '아들에게 구독 목록 보기 허용',
       description: '허용하면 아들이 구독 목록을 가져오고 지금 이 방에 참여한 가족에게 공유해요. 해지는 건마다 계정 주인이 결정해요.',
-      rows: [row('작업 공간', space(owner)), row('허용할 권한', '아들의 구독 목록 조회와 이 방에 공유')],
+      rows: [row('작업 공간', space(owner)), row('허락할 일', '아들이 구독 목록을 보고 이 방에 공유하기')],
       actions: [
         button('scope', '목록 보기 허용', { actor: owner }),
         button('deny', '허용 안 함', { actor: owner, variant: 'secondary' }),
@@ -537,24 +537,24 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }, all
   }
 
   if (phase === 'awaiting-scope' && ['scope', 'deny'].includes(action)) {
-    if (actor !== owner) return reply(room, `조회 권한은 ${subj(name)} 결정해요.`);
+    if (actor !== owner) return reply(room, `목록을 보여줄지는 ${subj(name)} 결정해요.`);
     if (action === 'deny') return ready(room, owner);
     return ready(room, owner, { actor: 'son', visibleTo: room.members.filter((id) => id !== 'fa') });
   }
 
   if (['scan', 'propose', 'setup'].includes(action)) {
-    if (!canRead && !helper) return reply(room, '이 계정의 목록을 조회할 권한이 없어요.');
+    if (!canRead && !helper) return reply(room, '이 계정의 목록을 볼 수 있는 허락을 받지 않았어요.');
     if (phase === 'awaiting-login') return reply(room, `${name}의 계정 연결을 기다리고 있어요.`);
-    if (phase === 'awaiting-scope') return reply(room, `${subj(name)} 목록 조회 권한을 결정할 때까지 기다려 주세요.`);
+    if (phase === 'awaiting-scope') return reply(room, `${subj(name)} 목록을 보여줄지 결정할 때까지 기다려 주세요.`);
     if (action === 'setup') return reply(room, `${name}의 계정이 이미 연결되어 있어요.`);
-    if (!canRead) return reply(room, '이 계정의 목록을 조회할 권한이 없어요.');
+    if (!canRead) return reply(room, '이 계정의 목록을 볼 수 있는 허락을 받지 않았어요.');
     if (phase === 'awaiting-approval') return reply(room, `${subj(name)} 해지 요청을 확인하고 있어요.`);
 
     if (action === 'scan') return readList(room, vm, actor, owner, grant);
 
     if (phase !== 'review') return reply(room, '구독 목록부터 확인해 주세요.');
     const service = list.subscriptions.find(({ id }) => id === value);
-    if (!service) return reply(room, '조회 결과에서 해지할 구독 한 개를 골라 주세요.');
+    if (!service) return reply(room, '목록에서 해지할 구독 한 개를 골라 주세요.');
     const gate = policy(actor, owner, 'cancel_subscription');
     if (gate.decision === 'deny') {
       return reply(room, gate.reason, { kind: 'blocked', title: '해지 요청 차단', description: gate.reason }, visibleTo);
@@ -563,10 +563,10 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }, all
     transition(room, 'awaiting-approval', owner, { grant, list, pending: { id, service, actor } });
     return reply(room, `${name}, ${service.name} 구독을 해지할지 확인해 주세요.`, {
       kind: 'approval', audience: owner, title: `${service.name} 해지 요청`,
-      description: '이 서비스의 해지만 승인해요. 시뮬레이션에서는 다음 달 갱신을 중단한 것으로 표시돼요.',
+      description: '이 서비스의 해지만 승인해요. 연습이라 다음 달부터 결제가 멈춘 것으로만 표시돼요.',
       rows: [
         row('요청한 사람', LABEL[actor]), row('작업 공간', space(owner)), row('데모 구독료', service.price),
-        row('권한 엔진', gate.reason),
+        row('규칙', gate.reason),
       ],
       actions: [
         button('approve', '해지 승인하기', { value: id, actor: owner }),
@@ -588,7 +588,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }, all
         { type: 'owner-approval', approval_id: pending.id }, pending.id);
     } catch {
       transition(room, 'ready', owner, { grant });
-      return reply(room, 'VM 에이전트가 해지를 확인하지 못했어요. 목록을 다시 조회해 주세요.', {
+      return reply(room, '해지가 확인되지 않았어요. 목록을 다시 불러와 주세요.', {
         kind: 'ready', title: '구독 목록 다시 확인',
         actions: [button('scan', `${name} 구독 목록 보기`, { actors: readers(owner, grant) })],
       }, visibleTo);
@@ -597,7 +597,7 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }, all
     transition(room, 'complete', owner, { grant });
     return reply(room, `${subj(name)} 승인한 ${subscription.name} 구독 해지 데모를 마쳤어요.`, {
       kind: 'result', title: `${subscription.name} 해지 완료`,
-      description: 'VM 에이전트가 시뮬레이션 결과를 돌려줬어요. 실제 구독과 결제에는 영향이 없어요.',
+      description: '연습용 결과예요. 실제 구독과 결제는 바뀌지 않아요.',
       rows: [
         row('요청한 사람', LABEL[pending.actor]), row('작업 공간', space(owner)),
         row('승인한 사람', name), row('다음 달 절약 예시', subscription.price.replace('월 ', '')),

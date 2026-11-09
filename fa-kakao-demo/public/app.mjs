@@ -253,7 +253,7 @@ function renderCard(card, item, index) {
   const locked = !isCurrentCard(card, item.flow);
   const rows = card.rows?.length ? `<dl>${card.rows.map(row => `<div><dt>${esc(row.label)}</dt><dd>${esc(row.detail)}</dd></div>`).join('')}</dl>` : '';
   const requiresOwner = card.audience && state.actor !== card.audience;
-  const cardLabels = {welcome:['bot','치즈와 시작하기'],login:['lock','계정 연결 요청'],scope:['shield','권한 요청'],ready:['shield','연결 완료'],subscriptions:['list','구독 조회 결과'],approval:['shield','승인 요청'],result:['check','작업 완료'],blocked:['lock','권한 확인']};
+  const cardLabels = {welcome:['bot','치즈와 시작하기'],login:['lock','계정 연결 요청'],scope:['shield','허락 요청'],ready:['shield','연결 완료'],subscriptions:['list','구독 조회 결과'],approval:['shield','승인 요청'],result:['check','작업 완료'],blocked:['lock','권한 확인']};
   const [symbol, title] = cardLabels[card.kind] || ['info','Family AI Agent'];
   return `<section class="fa-card card-${esc(card.kind)}"><div class="card-body">
     <div class="card-kicker">${icon(symbol,15)} ${title}${card.audience ? `<span class="card-audience">${esc(label(card.audience))} 전용</span>` : ''}</div>
@@ -814,7 +814,7 @@ function renderDialog() {
         <div class="input-context">${icon('lock',19)} ${owner} 전용 입력</div>
         <p>발표에 사용할 샘플 계정을 선택해 주세요. 선택 내용은 채팅방에 표시되지 않아요.</p>
         <label>데모 계정<select name="sample" class="form-field" required><option value="">계정을 선택해 주세요</option><option value="${esc(modal.owner)}-demo">${owner}의 샘플 계정</option></select></label>
-        <p class="field-note">이 계정으로 ${owner}의 VM 연결 과정을 시연해요.</p></div>${dialogActions('데모 계정 연결')}`;
+        <p class="field-note">이 계정으로 ${owner} 전용 공간에 연결하는 과정을 보여줘요.</p></div>${dialogActions('데모 계정 연결')}`;
       break;
     }
     case 'input':
@@ -836,7 +836,7 @@ function renderDialog() {
       break;
     case 'remove-fa':
       title = '챗봇 내보내기';
-      body = `<div class="dialog-body"><p>치즈를 내보내면 이 방의 데모 계정 연결과 진행 중인 권한 요청이 초기화돼요.</p></div>${dialogActions('내보내기', false, true)}`;
+      body = `<div class="dialog-body"><p>치즈를 내보내면 이 방의 데모 계정 연결과 진행 중인 허락 요청이 처음 상태로 돌아가요.</p></div>${dialogActions('내보내기', false, true)}`;
       break;
     case 'reset':
       title = '처음부터 다시 시연';
@@ -844,7 +844,7 @@ function renderDialog() {
       break;
     case 'guide':
       title = '발표 시연 안내';
-      body = `<div class="dialog-body guide-body"><p>상단의 <strong>보는 사람</strong>에서 가족 구성원의 화면을 바꿀 수 있어요.</p>
+      body = `<div class="dialog-body guide-body"><p>상단의 <strong>보는 사람</strong>에서 가족 각자의 화면으로 바꿀 수 있어요.</p>
         <div class="guide-cheese">${avatar('fa',64)}<div><strong>우리 가족 AI 도우미, 치즈</strong><p>치즈~ 같이 해볼까요?</p></div></div>
         <ol><li><strong>아들</strong> 화면에서 우리 가족 방을 열고 방 이름 아래 <strong>참여자 수 → 대화상대 초대하기</strong>를 누르세요. 친구 목록에서 <strong>치즈</strong>를 선택하고 <strong>확인</strong>을 누르세요.</li>
         <li>치즈에게 <strong>“엄마 구독 좀 정리해줘”</strong>를 보내세요. <strong>엄마</strong>로 바꿔 우리 가족 방을 열고, 샘플 계정을 연결한 뒤 목록 조회를 허용하세요.</li>

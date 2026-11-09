@@ -25,21 +25,21 @@ test('son starts mom\'s Coupang login: it runs in mom\'s VM and only mom can log
   const asked = await act('son', 'chat', '엄마가 쓸 쿠팡 아이디 로그인 해줘');
   assert.equal(asked.card.kind, 'login');
   assert.equal(asked.card.audience, 'mom');
-  assert.equal(rowOf(asked.card, '라우팅'), '아들 → FA → 엄마의 VM');
+  assert.equal(rowOf(asked.card, '처리 순서'), '아들 → FA → 엄마 전용 공간');
   assert.match(await act('son', 'login', 'son-demo').then((r) => r.text), /엄마가 직접 해야 해요/);
   const done = await act('mom', 'login', 'mom-demo');
   assert.equal(done.card.title, '엄마 쿠팡 연결 완료');
-  assert.equal(rowOf(done.card, '연결된 VM'), '엄마의 VM');
+  assert.equal(rowOf(done.card, '연결된 곳'), '엄마 전용 공간');
 });
 
 test('"엄마의 이메일 연동을 시작해줘" goes to mom\'s VM; "내 이메일 계정을 연동해줘" goes to son\'s VM', async () => {
   const act = room();
   const mom = await act('son', 'chat', '엄마의 이메일 연동을 시작해줘');
   assert.equal(mom.card.audience, 'mom');
-  assert.match(rowOf(mom.card, '라우팅'), /엄마의 VM$/);
+  assert.match(rowOf(mom.card, '처리 순서'), /엄마 전용 공간$/);
   const own = await act('son', 'chat', '내 이메일 계정을 연동해줘');
   assert.equal(own.card.audience, 'son');
-  assert.equal(rowOf(own.card, '라우팅'), '아들 → FA → 아들의 VM');
+  assert.equal(rowOf(own.card, '처리 순서'), '아들 → FA → 아들 전용 공간');
   const done = await act('son', 'login', 'son-demo');
   assert.equal(done.card.title, '아들 이메일 연결 완료');
 });
@@ -51,7 +51,7 @@ test('mom: "쌀이 떨어져서 10kg 주문해줘" asks her Coupang login first,
   assert.equal(first.card.audience, 'mom');
   const ordered = await act('mom', 'login', 'mom-demo');
   assert.equal(ordered.card.title, '쌀 10kg 주문 준비 완료');
-  assert.equal(rowOf(ordered.card, '실행 VM'), '엄마의 VM');
+  assert.equal(rowOf(ordered.card, '실행하는 곳'), '엄마 전용 공간');
   assert.equal(rowOf(ordered.card, '배송지'), '엄마 집 (등록된 주소)');
   assert.equal(rowOf(ordered.card, '금액'), '32,900원');
 

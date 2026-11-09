@@ -387,7 +387,7 @@ export async function submitInput({ requestId, userId, values = {} }) {
   r.status = 'done';
   emitInputCard(r, { maskedId });
   remember(N(r.owner), `${svc.label} 연결됨 (${maskedId})`);
-  faSay(r.roomId, `✅ ${N(r.owner)}님 ${svc.label} 연결 완료! 비밀번호는 ${N(r.owner)}님 VM 금고에만 있고, 가족에게도 보이지 않아요.`);
+  faSay(r.roomId, `✅ ${N(r.owner)}님 ${svc.label} 연결 완료! 비밀번호는 ${N(r.owner)}님 전용 공간의 금고에만 있고, 가족에게도 보이지 않아요.`);
 
   if (r.then) {
     // Resume the action that was waiting for this account. execute() re-checks the policy first.
@@ -485,7 +485,7 @@ export async function vote({ requestId, userId, vote: v }) {
   if (!canVote(r, userId)) {
     const why = r.decision.beneficiary === userId
       ? '돈을 받는 사람은 승인할 수 없어요.'
-      : userId === r.requester ? '요청한 사람은 승인자로 셀 수 없어요.' : '이 요청의 승인자가 아니에요.';
+      : userId === r.requester ? '요청한 사람은 승인할 수 없어요.' : '이 요청을 승인할 사람이 아니에요.';
     throw new EngineError(403, why);
   }
   r.votes[userId] = v;

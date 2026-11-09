@@ -109,7 +109,7 @@ function evaluateMoney(family, base, input) {
     `돈이 나가는 요청이라 ${nameOf(family, owner)}님 승인과 ` +
     `가족 1명(${coSigners.map((id) => nameOf(family, id)).join('·')})의 승인이 모두 필요해요.`;
   if (beneficiary === requester && requester !== owner) {
-    reason += ` 요청한 ${nameOf(family, requester)}님은 돈을 받는 사람이라 승인자로 셀 수 없어요.`;
+    reason += ` 요청한 ${nameOf(family, requester)}님은 돈을 받는 사람이라 승인할 수 없어요.`;
   }
 
   return {
