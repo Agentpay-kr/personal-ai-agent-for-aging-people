@@ -147,3 +147,12 @@ test('bank transfers, forged fields, and room audience changes cannot authorize 
   await room.act('son', 'retire');
   assert.equal((await room.send('mom', 'approve', approvalId)).status, 409);
 });
+
+test('a selectable guest can chat without obtaining VM permissions', async (t) => {
+  const room = (await demo(t))([...family, 'aunt']);
+  assert.equal((await room.act('aunt', 'chat', '안녕하세요')).handled, false);
+  await connect(room);
+  const denied = await room.act('aunt', 'chat', '엄마 구독 목록 보여줘');
+  assert.equal(denied.state.phase, 'ready');
+  assert.match(denied.messages[0].text, /조회할 권한이 없어요/);
+});
