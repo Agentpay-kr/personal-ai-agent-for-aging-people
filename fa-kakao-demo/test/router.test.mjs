@@ -133,7 +133,12 @@ test('concurrent approval requests consume only one approval', async (t) => {
 test('bank transfers, forged fields, and room audience changes cannot authorize work', async (t) => {
   const createRoom = await demo(t);
   const room = createRoom();
-  assert.equal((await room.act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘')).card.kind, 'blocked');
+  // With fa-trust the transfer waits for mom's device approval; without it the router blocks it.
+  const transfer = (await room.act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘')).card;
+  assert.ok(['blocked', 'approval'].includes(transfer.kind));
+  // Dad (requester and beneficiary) gets no button that could approve it.
+  assert.ok((transfer.actions ?? []).every((a) => a.action === 'trust_scam'
+    || a.actor === 'mom' || (a.actors && !a.actors.includes('dad'))));
   const absent = await createRoom(['son', 'fa']).act('son', 'chat', '엄마 구독 보여줘');
   assert.match(absent.messages[0].text, /엄마를.*초대/);
   await connect(room);
