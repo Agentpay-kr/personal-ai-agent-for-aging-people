@@ -1,48 +1,38 @@
-# Routing contract v1
+# Direct CLI routing contract v0.2
 
-Runtime: Node.js 24+, existing Molla API, host-provided session. Transport is local-only HTTP at `127.0.0.1` / `localhost`. Production OAuth, cross-host transport and service-account delegation are not implemented. An external person or agent selects operations and supplies verified context; this package does not contain an LLM routing loop.
+Runtime: Node.js 24+, local DB and host-provided local session file. No HTTP, cookies, web server or browser dependency. Local demo profiles are not production authentication.
 
-Direct command words map to dots: `task create` → `task.create`, `vm compose plan` → `vm.compose.plan`.
+Input remains schema version 1.0. `molla capabilities` and `docs/capabilities.json` enumerate operation arguments; `docs/request.schema.json` validates envelopes. Extra arguments including actor are rejected. Direct command words map to dots, e.g. `task execute` → `task.execute`.
 
-| Operation | Arguments | Meaning |
-|---|---|---|
-| health / identity.get | none | API readiness / current identity |
-| family.list / family.invite / family.join | name for invite; code for join | Visible family, demo invitation; join changes demo identity |
-| task.create | text, owner?, draft?, contactId? | Request awaiting owner approval |
-| task.list / task.get | status? / id | Current owner's tasks / exact action + approval_hash |
-| task.decide | id, decision | approve / reject / cancel |
-| memory.list / memory.search | query? for search | Owner's memories |
-| memory.remember / memory.correct | text; id for correct | Owner-authored memory |
-| memory.forget | id | Delete owner's memory |
-| memory.shared / memory.share / memory.revoke | id, grantee for share/revoke | Item-level sharing |
-| contact.list / contact.add / contact.remove | name, relation, phone for add; id for remove | Owner's contacts |
-| ontology.get | none | Owner's relationship/permission graph |
-| vm.diagnose | none | Check existing device binding |
-| vm.compose.plan | contactId, draft | Plan SMS composition screen; never send |
-| consent.set | value, ownerConfirmed | active / revoked |
+| Operation | Purpose |
+|---|---|
+| health / identity.get | Direct runtime health / current profile |
+| family.list / invite / join | Family membership and pending invitations |
+| task.create / list / get | Plan and inspect owner-scoped tasks |
+| task.decide | Approve, reject or cancel; approval needs ownerConfirmed and expectedActionHash |
+| task.execute | Atomically claim and execute an approved task |
+| task.recover | After expired execution lease, mark interrupted work needs_verification |
+| memory.list / search / remember / correct / forget | Owner's memory |
+| memory.shared / share / revoke | Explicit item sharing |
+| contact.list / add / remove | Owner's contact book |
+| ontology.get | Owner's relationship/permission graph |
+| consent.set / permission.set | Owner-confirmed consent and scopes |
+| vm.diagnose / compose.plan / app.plan | Owner-bound ADB checks and allowed action plans |
 
-Approval additionally requires `ownerConfirmed: true` and `expectedActionHash` from a fresh `task.get`. The hash is a client consistency check, not a signed approval token or atomic server comparison. Demo identities are not production authentication. Other decisions need neither field. Consent changes require the owner's explicit decision.
-
-`molla capabilities` and `docs/capabilities.json` are the complete argument allowlist; `docs/request.schema.json` defines envelopes. Extra fields including `actor` are rejected. Optional task `owner` chooses a target, not caller identity.
-
-Input:
+Input example:
 
 ```json
 {"schema_version":"1.0","request_id":"req-001","operation":"task.create","arguments":{"text":"쌀 10kg 주문해줘"}}
 ```
 
-Output:
+Output is `{schema_version,ok,operation,request_id?,data}` or `{schema_version,ok:false,operation,error:{code,message,retryable:false,status?}}`. Exit codes: 0 command success, 2 invalid input, 3 missing session, 4 authorization/owner decision, 5 runtime/domain failure. Task execution may return ok:true with data.status:failed: always inspect the business state. Logs and Node diagnostics go to stderr. Help/version are plain-text exceptions.
 
-```json
-{"schema_version":"1.0","ok":true,"operation":"task.create","request_id":"req-001","data":{"task":{"id":"...","status":"awaiting_approval"}}}
-```
+DB and session are process flags, never request fields. Caller identity is resolved from a hashed opaque token in the DB. Target task owner does not change caller. Sessions are bound to a runtime ID and database path. OS filesystem access remains the local trust boundary.
 
-```json
-{"schema_version":"1.0","ok":false,"operation":"task.create","error":{"code":"FORBIDDEN","message":"...","retryable":false,"http_status":403}}
-```
+Approval hash comparison and decision occur under BEGIN IMMEDIATE. Execution claims prevent concurrent replay; terminal tasks return existing results. A process interruption leaves durable running state. After its 60-second lease expires, explicit recovery marks needs_verification and never sends again automatically.
 
-`request_id` is correlation only. The wrapper never retries. Mutation timeouts may have `outcome: "unknown"`; inspect state first. Logs go to stderr; session cookies are not printed. Exit codes: 0 success, 2 usage/config, 3 session required, 4 forbidden/owner decision, 5 API/network/protocol. Help/version are human-readable exceptions.
+Flow: awaiting_approval → running (approved, not executed) → explicit task.execute → prepared / needs_verification / completed / failed. Completed is only used for verified app opening, not general purchase or SMS delivery. Prepared means a local draft artifact; intent_opened needs device inspection.
 
-Task flow: `awaiting_approval → running → prepared | needs_verification | failed`; rejected/cancelled are terminal. `completed` is legacy state, not proof of a new transaction. Prepared carries a local draft artifact. Needs verification requires human inspection. Require actual execution evidence before reporting external success.
+Android settings come from the operator's MOLLA_PHONE_BINDINGS and MOLLA_ADB. Permissions and allow flags are checked before side effects. Device/recipient/action changes invalidate execution. CLI cannot rent cloud devices, sign into apps, transfer funds, auto-send SMS or auto-pay.
 
-Server operators configure `MOLLA_PHONE_BINDINGS` per owner. The CLI cannot assign/rent VMs, select arbitrary ADB serials, log into another user's app or send automatically. Phone Harness Cloud authentication and saved-device provisioning remain operator setup.
+This package contains its runtime source; it does not import from the sibling app. No LLM is required. An external router may use a model to select an operation, but the model cannot supply session authority or bypass owner approval.

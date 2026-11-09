@@ -1,11 +1,11 @@
 {
   "name": "@molla/agent-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "JSON CLI and skill contract for routing Molla family agent operations",
+  "description": "Standalone Molla CLI runtime and router skill, without a web server or browser",
   "engines": { "node": ">=24" },
   "bin": { "molla": "bin/molla.mjs" },
   "scripts": { "test": "node --test tests/*.test.mjs", "check": "node --check bin/molla.mjs && node --check lib/client.mjs && node --check lib/operations.mjs", "pack:handoff": "node scripts/package-handoff.mjs" },
-  "files": ["bin", "lib", "skills", "docs", "examples", "README.md", "package.json"]
+  "files": ["bin", "lib", "runtime", "skills", "docs", "examples", "README.md", "package.json"]
 }
