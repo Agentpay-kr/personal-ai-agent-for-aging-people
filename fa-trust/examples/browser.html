@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fa-trust 브라우저 예제</title>
+    <style>
+      :root {
+        --bg: #b2c7d9;
+        --bubble: #ffffff;
+        --mine: #fee500;
+        --text: #191919;
+        --sub: #556270;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+      }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: var(--mine);
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      #log {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: 560px;
+      }
+      .msg {
+        max-width: 90%;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: var(--bubble);
+        line-height: 1.5;
+        font-size: 14px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .mine {
+        align-self: flex-end;
+        background: var(--mine);
+      }
+      .who {
+        margin-bottom: 2px;
+        font-size: 12px;
+        color: var(--sub);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <button id="subs">① 구독 해지 (2-of-3)</button>
+      <button id="scam">② 보이스피싱 차단</button>
+      <button id="fake">③ 사칭범 승인</button>
+    </div>
+    <div id="log" aria-live="polite"></div>
+
+    <script type="module">
+      import { FamilyTrust, MemberDevice } from '../dist/fa-trust.js';
+
+      const log = document.getElementById('log');
+
+      function add(who, text, mine = false) {
+        const el = document.createElement('div');
+        el.className = mine ? 'msg mine' : 'msg';
+        const name = document.createElement('div');
+        name.className = 'who';
+        name.textContent = who;
+        el.append(name, document.createTextNode(text));
+        log.append(el);
+      }
+
+      function setup() {
+        log.replaceChildren();
+        const trust = new FamilyTrust({
+          members: [
+            { id: 'mom', name: '엄마', role: 'parent' },
+            { id: 'dad', name: '아빠', role: 'parent' },
+            { id: 'son', name: '아들', role: 'child' },
+          ],
+          executor: (req) => `${req.summary ?? req.kind} 완료 (엄마 VM에서 처리)`,
+        });
+        trust.on((e) => add('FA', e.message));
+        return { trust, mom: trust.createDevice('mom'), dad: trust.createDevice('dad'), son: trust.createDevice('son') };
+      }
+
+      document.getElementById('subs').onclick = async () => {
+        const { trust, mom, son } = setup();
+        await trust.linkAccount('mom', 'netflix', 'session-cookie');
+        add('아들', '엄마 넷플릭스 안 보시니까 해지해줘', true);
+        const a = await trust.request(son, {
+          owner: 'mom',
+          kind: 'cancel_subscription',
+          service: 'netflix',
+          summary: '엄마 넷플릭스 해지',
+          text: '엄마 넷플릭스 안 보시니까 해지해줘',
+        });
+        add('엄마', '[ 네, 해지할게요 ] 👆', true);
+        await trust.approveWith(mom, a.id);
+      };
+
+      document.getElementById('scam').onclick = async () => {
+        const { trust, mom, son } = setup();
+        await trust.linkAccount('mom', 'coupang', 'session-cookie');
+        const text = '검찰에서 전화 왔는데 안전계좌로 300만원 옮기래. 가족한테 말하지 말래';
+        add('엄마', text, true);
+        const a = await trust.request(mom, {
+          owner: 'mom',
+          kind: 'transfer',
+          amountKRW: 3_000_000,
+          payee: '농협 352-0000-0000',
+          summary: '300만원 송금',
+          text,
+        });
+        add('아들', '엄마 그거 사기야! 전화 끊어!', true);
+        await trust.rejectWith(son, a.id, { scam: true });
+      };
+
+      document.getElementById('fake').onclick = async () => {
+        const { trust, son } = setup();
+        await trust.linkAccount('mom', 'netflix', 'session-cookie');
+        const a = await trust.request(son, {
+          owner: 'mom',
+          kind: 'cancel_subscription',
+          service: 'netflix',
+          summary: '엄마 넷플릭스 해지',
+        });
+        add('??? (엄마 사칭)', '[ 네 ] 👆', true);
+        await trust.approveWith(new MemberDevice('mom'), a.id);
+        add('시스템', `상태: ${a.status} · 승인 ${a.approvals.length}명`);
+      };
+
+      window.__faReady = true;
+    </script>
+  </body>
+</html>
