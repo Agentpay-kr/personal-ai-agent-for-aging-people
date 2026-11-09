@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { createDemoVmAgent, DEMO_SUBSCRIPTIONS, DEMO_VM_BINDINGS } from './vm-agent.mjs';
+import { createTrustGate, isMoneyRequest, TRUST_ACTIONS } from './trust-gate.mjs';
 // The FA engine's family permission engine decides who may do what (fa-engine/src/policy.js).
+// Money requests go to fa-trust first (device proofs, trust panel); the FA engine's family
+// multisig below is the fallback when fa-trust isn't available. Both apply the same rule:
+// account owner + one family co-signer, requester and beneficiary excluded.
 import { evaluate, canVote, approvalState } from '../fa-engine/src/policy.js';
 import { seedFamily, polish } from '../fa-engine/src/family.js';
 
 const LABEL = { mom: '엄마', dad: '아빠', son: '아들' };
 const MEMBERS = new Set([...Object.keys(LABEL), 'aunt', 'friend', 'fa']);
-const ACTIONS = new Set(['welcome', 'chat', 'setup', 'login', 'scope', 'deny', 'scan', 'propose', 'approve', 'cosign', 'retire']);
+const ACTIONS = new Set(['welcome', 'chat', 'setup', 'login', 'scope', 'deny', 'scan', 'propose', 'approve', 'cosign', 'retire', ...TRUST_ACTIONS]);
 const FAMILY = (() => {
   const family = seedFamily();
   family.members.son.name = LABEL.son; // this demo calls the son "아들"
@@ -110,6 +114,30 @@ function reply(room, text, card, visibleTo) {
       ...(visibleTo && { visibleTo }),
     }] : [],
   };
+}
+
+// Several FA messages in one reply (used by the fa-trust security scenes).
+function replyMany(room, items) {
+  const { phase, owner, step_id } = room.flow;
+  const messages = items.filter((item) => item?.text).map(({ text, card, visibleTo }) => ({
+    by: 'fa',
+    text,
+    ...(card && { card: { ...card, ...(card.actions && { phase, step_id }) } }),
+    ...(visibleTo && { visibleTo }),
+  }));
+  return { handled: messages.length > 0, state: { phase, owner, step_id }, messages };
+}
+
+// Money requests and trust buttons go to fa-trust. Returns a Promise, or null to fall through.
+function routeTrust(room, gate, { actor, action, value }) {
+  if (!gate) return null;
+  if (action === 'chat' && isMoneyRequest(value)) {
+    return gate.fromChat(room, actor, value).then((items) => replyMany(room, items));
+  }
+  if (TRUST_ACTIONS.has(action)) {
+    return gate.button(room, actor, action, value).then((items) => replyMany(room, items));
+  }
+  return null;
 }
 
 function row(label, detail) {
@@ -284,6 +312,8 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
     ({ action, value, owner: ownerHint, transfer } = candidate);
   }
   if (action === 'welcome') return welcome(room);
+  if (TRUST_ACTIONS.has(action)) return reply(room, '보안 기능(fa-trust)이 연결되지 않았어요.');
+  // Reached only when fa-trust didn't take the money request (e.g. fa-trust isn't available).
   if (action === 'transfer') return proposeTransfer(room, actor, transfer);
   if (room.flow.phase === 'awaiting-cosign') {
     if (!['cosign', 'approve', 'deny'].includes(action)) return reply(room, '진행 중인 송금 승인을 먼저 마무리해 주세요.');
@@ -416,13 +446,23 @@ function routeRoom(room, vm, { actor, action, value, step_id, approval_id }) {
   return reply(room, '이미 끝났거나 아직 시작되지 않은 요청이에요. 가장 최근 FA 카드를 확인해 주세요.');
 }
 
-export function createRouter() {
+// trust: false skips fa-trust, so money requests use the FA engine's family multisig instead.
+export function createRouter({ trust: useTrust = true } = {}) {
   const demos = new Map();
+  const demoOf = (demo_id) => {
+    if (!demos.has(demo_id)) {
+      demos.set(demo_id, { vm: createDemoVmAgent(), rooms: new Map(), trust: useTrust ? createTrustGate() : null });
+    }
+    return demos.get(demo_id);
+  };
   return {
+    // fa-trust gate for this demo (null when fa-trust is not available).
+    trust(demo_id) {
+      return demoOf(demo_id).trust;
+    },
     handle(command) {
       const { demo_id, room_id, members, action } = command;
-      if (!demos.has(demo_id)) demos.set(demo_id, { vm: createDemoVmAgent(), rooms: new Map() });
-      const { vm, rooms } = demos.get(demo_id);
+      const { vm, rooms, trust } = demoOf(demo_id);
       const signature = members.toSorted().join(',');
       if (!rooms.has(room_id)) {
         const room = { members, signature, connections: new Map() };
@@ -435,7 +475,7 @@ export function createRouter() {
         rooms.set(room_id, null);
         return reply(room);
       }
-      return routeRoom(room, vm, command);
+      return routeTrust(room, trust, command) ?? routeRoom(room, vm, command);
     },
   };
 }

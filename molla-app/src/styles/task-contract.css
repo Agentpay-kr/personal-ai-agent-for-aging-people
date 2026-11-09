@@ -1,0 +1,10 @@
+/* Additional execution states from the server's evidence-backed orchestrator. */
+.status.prepared{background:#edf4ef;color:#668973}
+.status.needs_verification{background:#fcf1dc;color:#92763c}
+.status.failed{background:#f7ebec;color:#a16972}
+.action-preview{margin:19px 0;padding:16px;border:1px solid #e5ddeb;border-radius:12px;background:#fcfaff}
+.action-preview>strong{font-size:11px;color:#8b719e}
+.action-preview>p{font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0;color:#675374}
+.action-preview>small{font-size:10px;color:#9d89aa;line-height:1.8}
+.senior-app .action-preview>strong,.senior-app .action-preview>small{font-size:14px}
+.senior-app .action-preview>p{font-size:18px}

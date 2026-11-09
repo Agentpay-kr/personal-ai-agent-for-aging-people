@@ -13,7 +13,11 @@ const branches=Object.entries(operations).map(([name,s])=>{
 });
 await writeFile(resolve(root,'docs/request.schema.json'),JSON.stringify({$schema:'https://json-schema.org/draft/2020-12/schema',title:'Molla router request v1',oneOf:branches},null,2)+'\n');
 const files=[];
-async function walk(path){for(const d of await readdir(path,{withFileTypes:true})){const p=resolve(path,d.name);if(d.isDirectory())await walk(p);else if(d.isFile())files.push(p);else throw new Error('Only regular files are allowed');}}
+// Ship source and docs only. Hidden folders (e.g. .local with sessions/DBs) are skipped, and any
+// session, database or env file found inside the shipped folders stops the build.
+const SHIPPABLE=/\.(mjs|js|json|md|yaml|yml|txt)$/;
+const SECRET_LIKE=/(^|\/)(\.env[^/]*|[^/]*\.sqlite(-wal|-shm)?|[^/]*\.db|[^/]*session[^/]*\.json|[^/]*\.pem|[^/]*\.key)$/i;
+async function walk(path){for(const d of await readdir(path,{withFileTypes:true})){const p=resolve(path,d.name),rel=relative(root,p).replaceAll('\\','/');if(d.name.startsWith('.'))continue;if(d.isDirectory())await walk(p);else if(d.isFile()){if(SECRET_LIKE.test(rel))throw new Error(`Refusing to package a session/database/secret file: ${rel}`);if(!SHIPPABLE.test(d.name))throw new Error(`Refusing to package an unexpected file type: ${rel}`);files.push(p);}else throw new Error('Only regular files are allowed');}}
 for(const name of ['bin','lib','runtime','skills','docs','examples','scripts','tests'])await walk(resolve(root,name));
 for(const name of ['package.json','README.md','.gitignore'])files.push(resolve(root,name));
 const version=JSON.parse(await readFile(resolve(root,'package.json'),'utf8')).version;

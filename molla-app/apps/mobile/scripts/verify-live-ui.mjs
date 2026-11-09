@@ -13,7 +13,7 @@ const states = Object.fromEntries(['mom', 'dad'].map(id => [id, {
   me: { id, name: id === 'mom' ? '엄마' : '아빠', initial: id === 'mom' ? '엄' : '아', role: 'owner', consent: 'active', agentName: '몰라', scopes: ['shopping', 'calendar', 'message', 'phone'] },
   members: [{ id, name: id === 'mom' ? '엄마' : '아빠', initial: id === 'mom' ? '엄' : '아', role: 'owner', consent: 'active' }], messages: [], tasks: [], memories: [], contacts: [],
 }]));
-let aiReady = false, phoneState = 'stopped', failChat = false, live = true;
+let aiReady = false, phoneState = 'stopped', failChat = false, live = true, failScreen = false;
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
   const page = await context.newPage();
@@ -41,6 +41,7 @@ try {
     if (endpoint === '/phone/start') { assert.deepEqual(body, { quoteId: 'fixture-quote' }); phoneState = 'running'; return respond({ ok: true }); }
     if (endpoint === '/phone/stop') { phoneState = 'stopped'; return respond({ ok: true }); }
     if (endpoint === '/phone/diagnose') return respond({ ok: true });
+    if (endpoint === '/phone/screen') return failScreen ? respond({ error: 'Android 연결이 끊겼어요.' }, 409) : respond({ dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX7sAAAAASUVORK5CYII=', width: 1, height: 1, capturedAt: new Date().toISOString(), refreshAfterMs: 3000 });
     return respond({ error: `Unexpected fixture endpoint ${endpoint}` }, 404);
   });
   await page.goto(process.env.MOLLA_PREVIEW_URL || 'http://127.0.0.1:4323', { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -87,6 +88,19 @@ try {
   await page.getByTestId('confirm-vm-start').click();
   await expect(page.getByRole('button', { name: 'Android 사용 종료하기' })).toBeVisible();
   assert.equal(calls.filter(call => call.endpoint === '/phone/start').length, 1);
+  await page.getByTestId('open-phone-screen').click();
+  await expect(page.getByTestId('phone-live-image')).toBeVisible();
+  await expect(page.getByTestId('phone-captured-at')).toBeVisible();
+  await page.getByRole('button', { name: 'Android 화면 닫기' }).click();
+  const captures = calls.filter(call => call.endpoint === '/phone/screen').length;
+  await page.waitForTimeout(3300);
+  assert.equal(calls.filter(call => call.endpoint === '/phone/screen').length, captures);
+  failScreen = true;
+  await page.getByTestId('open-phone-screen').click();
+  await expect(page.getByText('Android 연결이 끊겼어요.', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('phone-live-image')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Android 화면 닫기' }).click();
+  checks.push('Android viewer renders authenticated frames; close stops polling and failure clears the previous image');
   await page.getByRole('button', { name: 'Android 사용 종료하기' }).click();
   await expect(page.getByRole('button', { name: 'Android 사용 비용 확인' })).toBeVisible();
   checks.push('VM quote is reviewed before one explicit start; stop is owner scoped');

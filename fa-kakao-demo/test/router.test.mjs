@@ -7,8 +7,8 @@ import { createDemoServer } from '../server.mjs';
 
 const family = ['son', 'mom', 'dad', 'fa'];
 
-async function demo(t) {
-  const server = createDemoServer({});
+async function demo(t, env = {}) {
+  const server = createDemoServer(env);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -133,10 +133,12 @@ test('concurrent approval requests consume only one approval', async (t) => {
 test('bank transfers, forged fields, and room audience changes cannot authorize work', async (t) => {
   const createRoom = await demo(t);
   const room = createRoom();
-  // A transfer never runs on the request alone: it waits for the FA engine's family multisig.
-  const transfer = await createRoom().act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
-  assert.equal(transfer.card.kind, 'approval');
-  assert.equal(transfer.state.phase, 'awaiting-cosign');
+  // A transfer never runs on the request alone: with fa-trust it waits for device approvals,
+  // without it the FA engine's family multisig. Either way dad gets no button that could approve it.
+  const transfer = (await createRoom().act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘')).card;
+  assert.ok(['blocked', 'approval'].includes(transfer.kind));
+  assert.ok((transfer.actions ?? []).every((a) => a.action === 'trust_scam'
+    || (a.actor && a.actor !== 'dad') || (a.actors && !a.actors.includes('dad'))));
   const absent = await createRoom(['son', 'fa']).act('son', 'chat', '엄마 구독 보여줘');
   assert.match(absent.messages[0].text, /엄마를.*초대/);
   await connect(room);
@@ -161,7 +163,8 @@ test('a selectable guest can chat without obtaining VM permissions', async (t) =
 });
 
 test('FA engine family multisig: owner + one co-signer; requester and beneficiary cannot sign', async (t) => {
-  const room = (await demo(t))();
+  // fa-trust off: money requests use the FA engine fallback.
+  const room = (await demo(t, { FA_TRUST: 'off' }))();
   const asked = await room.act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
   assert.match(asked.messages[0].text, /엄마 승인과 가족 1명\(아들\)의 승인이 모두 필요해요/);
   assert.match(asked.messages[0].text, /아빠는 돈을 받는 사람이라/);
@@ -190,7 +193,7 @@ test('FA engine family multisig: owner + one co-signer; requester and beneficiar
 });
 
 test('FA engine blocks transfers it cannot co-sign and family members without the right', async (t) => {
-  const createRoom = await demo(t);
+  const createRoom = await demo(t, { FA_TRUST: 'off' });
   const noCosigner = await createRoom(['mom', 'dad', 'fa']).act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
   assert.equal(noCosigner.card.kind, 'blocked');
   assert.match(noCosigner.card.description, /함께 승인할 가족이 이 방에 없어요/);

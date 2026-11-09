@@ -17,7 +17,9 @@ pnpm install --frozen-lockfile
 pnpm start
 ```
 
-앱의 실제 대화·Android 실행에는 별도로 운영하는 인증된 Molla API가 필요합니다. 이 변경은 모바일 클라이언트를 추가하며 서버나 모델 자격증명을 포함하지 않습니다. UI 검증은 합성 데이터를 사용하는 명시적 API fixture로 실행합니다.
+앱의 인증된 Node API, Letsur/Vercel AI 연결, 사용자별 기억·권한·승인, Android 실행 어댑터가 `molla-app/server`에 있습니다. [서버 설치·실행](molla-app/README.md)과 [현재 검증 범위](molla-app/docs/STATUS.md)를 확인하세요. 모델 키·개인 접속 코드·실행 DB는 각 운영 환경에서 설정합니다.
+
+실제 Letsur 및 Vercel 모델의 한국어 응답과 초안 생성은 검증했습니다. Android 화면 확인은 앱에 구현되어 있고 테스트를 통과했지만, 실제 클라우드 VM 실행은 사용자 요청에 따라 시작하지 않았습니다. 일반인의 휴대폰을 설치·동의 없이 인터넷에서 원격 제어하는 기능은 아닙니다.
 
 ## 독립 CLI
 
@@ -43,4 +45,4 @@ v0.2는 로컬 SQLite와 권한·실행 코어를 직접 사용합니다. 승인
 
 ## Family AI Agent 카카오톡 데모
 
-[카카오톡 목업과 중앙 FA 라우터](fa-kakao-demo/README.md)에서 가족별 VM 선택, 조회 위임, 소유자 승인 흐름을 로컬 샘플로 시연합니다. 라우터는 [FA 엔진의 권한 엔진](fa-engine/src/policy.js)으로 판단하고, 송금은 가족 멀티시그(계정 주인 + 가족 1명 승인, 요청자·수혜자 제외)로 처리합니다.
+[카카오톡 목업과 중앙 FA 라우터](fa-kakao-demo/README.md)에서 가족별 VM 선택, 조회 위임, 소유자 승인 흐름을 로컬 샘플로 시연합니다. 송금 승인·보이스피싱 보류·긴급 잠금 같은 보안 장면은 [fa-trust 보안 코어](fa-trust/README.md)가 판정하고, 채팅방에서 FA를 누르면 열리는 **신뢰 패널**에 표시됩니다. 조회·해지 판단에는 [FA 엔진의 권한 엔진](fa-engine/src/policy.js)이 함께 쓰이고, fa-trust 없이 실행하면(`FA_TRUST=off`) 송금은 FA 엔진의 가족 멀티시그(계정 주인 + 가족 1명, 요청자·수혜자 제외)로 처리됩니다.

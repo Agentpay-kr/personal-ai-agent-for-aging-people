@@ -1,0 +1,27 @@
+{
+  "name": "fa-trust",
+  "version": "0.1.0",
+  "description": "Family Agent trust core: policy gate, 2-of-3 key split, hierarchical group keys, Schnorr ZK device proofs, crypto-shredding",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "tsx --test test/*.test.ts",
+    "demo": "tsx demo/scenario.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/fa-trust.js",
+    "serve": "python3 -m http.server 8790"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

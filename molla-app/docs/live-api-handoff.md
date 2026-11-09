@@ -1,6 +1,6 @@
 # Mobile API contract
 
-The native client connects to an independently deployed Molla HTTP JSON API. This mobile-design change does not publish the backend, provider credentials, a VM deployment or a working model account. The independent `molla-cli` package does not provide these HTTP routes.
+The native client connects to the Molla HTTP JSON API implemented in `server/`. This repository includes its code, not provider credentials or deployed accounts. The independent `molla-cli` package does not provide these HTTP routes. See `STATUS.md` for verified boundaries and unfinished device/deployment work.
 
 ## Identity and transport
 
@@ -24,11 +24,14 @@ Every private request sends `Authorization: Bearer <owner-app-token>` to the exa
 | `POST /api/phone/start` | `{quoteId}` | Explicitly accepted, owner-scoped start; no automatic retry |
 | `POST /api/phone/stop` | `{}` | Stop owner's running session |
 | `POST /api/phone/diagnose` | `{}` | Refresh owner's connection information |
+| `GET /api/phone/screen` | None | Owner-authorized `{dataUrl,width,height,capturedAt,refreshAfterMs}` PNG; no serial/viewer credentials; no-store |
 
 `llm` reports `enabled`, `configured`, `model`, `consented`, `includeMemories` and `ready`. `phone` reports `configured`, `state`, optional `provider`, `phoneId`, `expiresAt` and `actions`. `limits` reports `vmMaxMinutes` and `vmPricePerMinuteUsd`.
 
 `Task.action` contains the exact `type`, `body`, `recipient`, `appId` and `execution` the person reviews. Supported execution modes are `local`, `android-compose`, and `android-app`. A successful decision POST does not establish completion: the refreshed task must include verified evidence. Draft preparation, unverified state, actual app opening and message sending must not be conflated.
 
 ## Verification
+
+Screen capture requires active owner consent and phone scope, binds to the owner's current device, rechecks identity/permissions after capture and rate limits requests. The client polls only while its viewer is open and foregrounded; it clears failed/stale private images. This is periodic capture, not streaming video or arbitrary touch control.
 
 Run `pnpm test:runtime`, `pnpm verify:live`, and `pnpm verify:ui` from `apps/mobile`. Runtime tests exercise a temporary local HTTP server; UI tests intercept a named test origin with synthetic data. They never require or demonstrate a real model or VM. Release integration requires backend deployment, reachable HTTPS, owner tokens, configured providers and real-device testing.

@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "checkedAt": "2026-11-09T03:41:30.492Z",
+  "readOnly": true,
+  "modelCalls": 0,
+  "vmStarts": 0,
+  "bundledSecrets": false,
+  "localMobileUrl": "http://127.0.0.1:4318",
+  "states": [
+    {
+      "actor": "mom",
+      "consent": "pending",
+      "model": "gpt-4.1-mini",
+      "vmConfigured": true,
+      "vmState": "not_started"
+    },
+    {
+      "actor": "dad",
+      "consent": "pending",
+      "model": "gpt-4.1-mini",
+      "vmConfigured": false,
+      "vmState": "not_started"
+    },
+    {
+      "actor": "son",
+      "consent": "pending",
+      "model": "gpt-4.1-mini",
+      "vmConfigured": false,
+      "vmState": "not_started"
+    }
+  ]
+}
