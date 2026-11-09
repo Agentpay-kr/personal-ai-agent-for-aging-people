@@ -360,6 +360,76 @@
       "additionalProperties": false,
       "required": [
         "schema_version",
+        "operation",
+        "arguments"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[-a-zA-Z0-9_.:]{1,128}$"
+        },
+        "operation": {
+          "const": "task.execute"
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "required": [
+            "id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "operation",
+        "arguments"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[-a-zA-Z0-9_.:]{1,128}$"
+        },
+        "operation": {
+          "const": "task.recover"
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "required": [
+            "id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
         "operation"
       ],
       "properties": {
@@ -850,6 +920,47 @@
           "pattern": "^[-a-zA-Z0-9_.:]{1,128}$"
         },
         "operation": {
+          "const": "vm.app.plan"
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "appId": {
+              "type": "string",
+              "minLength": 1,
+              "enum": [
+                "settings",
+                "browser",
+                "kakao",
+                "coupang",
+                "calendar"
+              ]
+            }
+          },
+          "required": [
+            "appId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "operation",
+        "arguments"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[-a-zA-Z0-9_.:]{1,128}$"
+        },
+        "operation": {
           "const": "consent.set"
         },
         "arguments": {
@@ -870,6 +981,45 @@
           },
           "required": [
             "value",
+            "ownerConfirmed"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "operation",
+        "arguments"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[-a-zA-Z0-9_.:]{1,128}$"
+        },
+        "operation": {
+          "const": "permission.set"
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scopes": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "ownerConfirmed": {
+              "const": true
+            }
+          },
+          "required": [
+            "scopes",
             "ownerConfirmed"
           ]
         }

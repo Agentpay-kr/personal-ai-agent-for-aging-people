@@ -1,9 +1,19 @@
-# Molla — Personal AI Agent for Aging People
+# Molla — CLI Personal Agent
 
-가족별 개인 공간에서 작동하는 AI 도우미 프로젝트입니다.
+**웹 서버·HTTP API·브라우저 없이 실행하는 독립 CLI와 라우팅 스킬입니다.**
 
-[Molla CLI](molla-cli/README.md), [라우팅 스킬](molla-cli/skills/molla-router/SKILL.md), [담당자 인계](molla-cli/docs/HANDOFF.md)를 제공합니다.
+- [CLI 실행법](molla-cli/README.md)
+- [라우팅 스킬 SKILL.md](molla-cli/skills/molla-router/SKILL.md)
+- [담당자 인계](molla-cli/docs/HANDOFF.md)
+- [명령 목록](molla-cli/docs/capabilities.json)
 
-Node.js 24 이상에서 `node molla-cli/bin/molla.mjs capabilities`로 시작하세요.
+Node.js 24 이상에서 시작하세요. npm 설치나 웹 앱 체크아웃은 필요 없습니다.
 
-현재 CLI는 로컬 통합용 API 클라이언트입니다. 앱 서버는 별도로 필요합니다. 운영 인증·클라우드 VM 생성·자동 결제/전송은 아직 연결되지 않았으며 웹 앱 구현은 별도 작업에서 진행 중입니다.
+```sh
+node molla-cli/bin/molla.mjs capabilities
+node molla-cli/bin/molla.mjs health
+```
+
+v0.2는 로컬 SQLite와 권한·실행 코어를 직접 사용합니다. 승인 비교는 원자적으로 처리하며, 승인 후 `task execute`를 명시적으로 호출합니다. 15개 테스트에는 웹 사용을 금지한 독립 패키지 실행 검증이 포함됩니다.
+
+현재 기본 실행은 로컬 초안입니다. 실제 클라우드 Android VM은 운영자가 소유자별 ADB 연결을 준비해야 하고, 운영 인증·VM 생성·자동 결제/전송은 포함하지 않습니다.
