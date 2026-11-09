@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+dist/
+web-build/
+.data/
+.output/
+test-results/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+*.log
