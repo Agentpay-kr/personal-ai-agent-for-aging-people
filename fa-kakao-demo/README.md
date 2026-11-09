@@ -73,6 +73,8 @@ flowchart LR
 
 위임 스킬은 Molla의 작업 허용 목록, 버전이 명시된 JSON 요청, 소유자 확인과 상태 보고를 참고했다. [Molla 라우팅 스킬](https://github.com/him55710-sudo/personal-ai-agent-for-aging-people/blob/4706c12d7d6b2d9fa527a082f9bd6a2c2dc51119/molla-cli/skills/molla-router/SKILL.md)
 
+저장소 전체의 패키지 구성, 위험도별 승인, 기기 증명과 키 분할은 [기술 스택과 신뢰 설계](../README.md#기술-스택과-신뢰-설계)에 정리했다.
+
 ## LLM 설정과 데모 범위
 
 기본 실행은 서버가 **샘플 응답**을 표시한다. 실제 응답을 사용하려면 실행 환경에 `FA_MODEL`과 `FA_API_KEY` 또는 `FA_API_BASE_URL`을 지정한다. API 주소를 생략하면 OpenAI 기본 주소를 사용한다. 호환 API 주소는 `/v1`까지 설정하고 서버가 `/chat/completions`를 붙인다. 참고 값은 [env.example](env.example)에 있으며, API 키는 실행 환경에만 설정한다.
