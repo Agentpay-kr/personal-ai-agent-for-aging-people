@@ -4,7 +4,7 @@ import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createAgent } from './agent.mjs';
-import { createRouter, validRouterRequest } from './router.mjs';
+import { createRouter, validRouterRequest, validTrustRequest } from './router.mjs';
 
 const PUBLIC = fileURLToPath(new URL('./public', import.meta.url));
 const LOOPBACK = new Set(['127.0.0.1', 'localhost']);
@@ -123,7 +123,7 @@ export function createDemoServer(env = process.env) {
     }
 
     try {
-      const { pathname } = new URL(request.url, host.origin);
+      const { pathname, searchParams } = new URL(request.url, host.origin);
       if (request.method === 'GET' && pathname === '/api/status') {
         return json(response, 200, { mode: agent.mode });
       }
@@ -142,22 +142,17 @@ export function createDemoServer(env = process.env) {
         }
         return json(response, 200, result);
       }
-      // fa-trust panel: security events for one demo, and the impostor-approval demo button.
-      if (pathname === '/api/trust' || pathname === '/api/trust/impostor') {
-        const params = new URL(request.url, host.origin).searchParams;
-        const demoId = params.get('demo_id');
-        if (!/^[0-9a-f-]{36}$/i.test(demoId ?? '')) return json(response, 400, { error: 'demo_id가 필요해요.' });
-        const gate = router.trust(demoId);
-        if (!gate) return json(response, 200, { enabled: false });
-        if (request.method === 'GET' && pathname === '/api/trust') {
-          return json(response, 200, gate.snapshot(Number(params.get('since')) || 0));
+      if ((request.method === 'GET' && pathname === '/api/trust')
+          || (request.method === 'POST' && pathname === '/api/trust/action')) {
+        const body = request.method === 'GET'
+          ? Object.fromEntries(searchParams)
+          : await readJson(request, response, host.origin);
+        if (body === undefined) return;
+        if (!validTrustRequest(body, request.method)) {
+          return json(response, 400, { error: '채팅방과 참여자 정보를 확인해 주세요.' });
         }
-        if (request.method === 'POST' && pathname === '/api/trust/impostor') {
-          if (request.headers.origin && request.headers.origin !== host.origin) {
-            return json(response, 403, { error: '이 데모 페이지에서만 요청할 수 있어요.' });
-          }
-          return json(response, 200, await gate.impostor());
-        }
+        const result = await router.trustProfile(body);
+        return json(response, result.status, result.body);
       }
       if (request.method === 'GET' || request.method === 'HEAD') {
         return await serveStatic(request, response, pathname);

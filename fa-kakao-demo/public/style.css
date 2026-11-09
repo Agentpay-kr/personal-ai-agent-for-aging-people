@@ -100,6 +100,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .friend-row small, .profile-self small { color: var(--muted); margin-top: 1px; }
 .friend-row .tag { margin-left: auto; }
 .tag { padding: 3px 8px; border-radius: 99px; background: #f3f0ea; font-size: 10px; color: #645d52; white-space: nowrap; }
+.room-title .tag { flex: none; padding: 2px 5px; }
 
 .avatar { border-radius: 38%; flex: none; display: block; }
 .avatar-empty { width: 48px; height: 48px; display: grid; place-items: center; background: #eee8df; color: #675c53; }
@@ -222,6 +223,9 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .drawer-members small { color: #6c655d; font-size: 10px; border: 1px solid #dfdad3; border-radius: 99px; padding: 1px 5px; }
 .drawer-settings { border-top: 1px solid var(--line); padding-top: 7px; }
 .drawer footer { border-top: 1px solid var(--line); display: flex; align-items: center; gap: 4px; padding: 6px 12px; font-size: 12px; color: #675f56; }
+.room-exit-actions button { display: flex; flex: 1; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 5px 4px; border-radius: 7px; white-space: nowrap; }
+.room-exit-actions button:hover { background: #f5f4f2; }
+.room-exit-actions [data-action="delete-room"] { color: #a53029; }
 .drawer-note { margin: 13px 18px; color: #6a635c; }
 .drawer-bot { display: flex; align-items: center; gap: 9px; margin: 2px 14px 11px; padding: 8px; }
 .drawer-bot div { flex: 1; display: flex; flex-direction: column; }
@@ -245,6 +249,8 @@ dialog::backdrop { background: #18171567; }
 .picker-rows { padding-top: 6px; }
 .picker-row { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 7px 3px; }
 .picker-row > span { display: grid; flex: 1; }
+.picker-row:has(.contact-check:disabled), .contact-check:disabled { cursor: not-allowed; }
+.picker-row:has(.contact-check:disabled) .avatar { opacity: .55; }
 .contact-check, .quiet-leave input { appearance: none; width: 21px; height: 21px; border: 1px solid #a29a90; border-radius: 50%; margin: 0 4px; background: #fff; cursor: pointer; }
 .contact-check:checked, .quiet-leave input:checked { border-color: #e3ca00; background: var(--yellow); }
 .contact-check:checked::after, .quiet-leave input:checked::after { content: ""; display: block; width: 9px; height: 5px; transform: rotate(-45deg); border: solid #2f281b; border-width: 0 0 2px 2px; margin: 5px 4px; }
