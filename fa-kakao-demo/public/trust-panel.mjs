@@ -3,8 +3,8 @@ import { avatar, icon, people } from './visual.mjs';
 const eventNames = {
   decision: '정책 판정', family_alert: '가족 알림', approval: '기기 승인', scheduled: '실행 예약',
   executed: '실행 완료', shredded: '세션 폐기', evidence: '증거 봉인', proof_failed: '사칭 차단',
-  lockdown: '긴급 잠금', unlocked: '잠금 해제', linked: '계정 연결', rejected: '요청 취소',
-  expired: '요청 만료', member_removed: '구성원 제거',
+  lockdown: '긴급 잠금', self_destruct: '자동 소멸', unlocked: '잠금 해제', linked: '계정 연결',
+  rejected: '요청 취소', expired: '요청 만료', member_removed: '구성원 제거',
 };
 const actionStates = { pending: '승인 대기', held: '확인 보류', scheduled: '실행 대기' };
 const displayTime = new Intl.DateTimeFormat('ko-KR', {
@@ -15,6 +15,12 @@ const esc = text => String(text ?? '').replace(/[&<>"']/g, c => ({
 })[c]);
 
 function securityStatus(snapshot, waiting) {
+  // fa-trust self-destructs on intrusion (takeover, hacking, contamination); show that apart from a lockdown.
+  const lastLock = (snapshot.events ?? []).filter(e => ['lockdown', 'self_destruct', 'unlocked'].includes(e.type)).at(-1);
+  if (snapshot.locked && lastLock?.type === 'self_destruct') return {
+    tone: 'locked', icon: 'lock', title: '외부 침해로 자동 소멸됨',
+    body: `세션과 기억을 지웠고, 남은 건 봉인된 증거와 감사 기록뿐이에요. 가족 기기 두 대가 동의하면 다시 시작해요. (${snapshot.unlockVotes ?? 0}/2)`,
+  };
   if (snapshot.locked) return {
     tone: 'locked', icon: 'lock', title: '송금 긴급 잠금 중',
     body: `등록된 가족 기기 두 대가 동의하면 잠금이 풀려요. (${snapshot.unlockVotes ?? 0}/2)`,

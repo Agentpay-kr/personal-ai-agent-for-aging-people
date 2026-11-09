@@ -266,7 +266,7 @@ export const heuristicJudge: Judge = async (input) => {
   if (recent.some((e) => e.type === 'proof_failed')) {
     flag(holds, 'recent_impostor', '최근 등록되지 않은 기기가 승인을 시도한 기록이 있어요.');
   }
-  if (sideEffect && recent.some((e) => e.type === 'lockdown')) {
+  if (sideEffect && recent.some((e) => e.type === 'lockdown' || e.type === 'self_destruct')) {
     flag(holds, 'recent_lockdown', '최근 긴급 잠금이 있었어요.');
   }
   const transfers = recent.filter((e) => e.type === 'request' && /송금|이체|transfer/.test(e.summary)).length;

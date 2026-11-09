@@ -820,12 +820,18 @@ var AuditLog = class {
   }
   /** Recompute the chain. Pass a copy (e.g. an exported log) to check it independently. */
   verify(entries = this.#entries) {
+    const broken = this.brokenEntries(entries);
+    return broken.length === 0 ? { ok: true } : { ok: false, brokenAt: broken[0] };
+  }
+  /** Every entry whose hash or back-link doesn't check out. Each tampered entry shows up on its own. */
+  brokenEntries(entries = this.#entries) {
+    const broken = [];
     let prev = GENESIS;
     for (const e of entries) {
-      if (e.prevHash !== prev || hashEntry(e) !== e.hash) return { ok: false, brokenAt: e.seq };
+      if (e.prevHash !== prev || hashEntry(e) !== e.hash) broken.push(e.seq);
       prev = e.hash;
     }
-    return { ok: true };
+    return broken;
   }
 };
 
@@ -1281,7 +1287,7 @@ var heuristicJudge = async (input) => {
   if (recent.some((e) => e.type === "proof_failed")) {
     flag(holds, "recent_impostor", "\uCD5C\uADFC \uB4F1\uB85D\uB418\uC9C0 \uC54A\uC740 \uAE30\uAE30\uAC00 \uC2B9\uC778\uC744 \uC2DC\uB3C4\uD55C \uAE30\uB85D\uC774 \uC788\uC5B4\uC694.");
   }
-  if (sideEffect && recent.some((e) => e.type === "lockdown")) {
+  if (sideEffect && recent.some((e) => e.type === "lockdown" || e.type === "self_destruct")) {
     flag(holds, "recent_lockdown", "\uCD5C\uADFC \uAE34\uAE09 \uC7A0\uAE08\uC774 \uC788\uC5C8\uC5B4\uC694.");
   }
   const transfers = recent.filter((e) => e.type === "request" && /송금|이체|transfer/.test(e.summary)).length;
@@ -1315,6 +1321,37 @@ var heuristicJudge = async (input) => {
     model: "heuristic-v1"
   };
 };
+
+// src/intrusion.ts
+var INTRUSION_KIND_LABEL = {
+  takeover: "\uD0C8\uCDE8",
+  hacking: "\uD574\uD0B9",
+  contamination: "\uC624\uC5FC"
+};
+var INTRUSION_SIGNALS = {
+  impostor_approval: { kind: "takeover", label: "\uB4F1\uB85D\uB418\uC9C0 \uC54A\uC740 \uAE30\uAE30\uAC00 \uAC00\uC871 \uC774\uB984\uC73C\uB85C \uC2B9\uC778\xB7\uAC70\uC808" },
+  unverified_requester: { kind: "takeover", label: "\uAE30\uAE30 \uC99D\uBA85 \uC5C6\uC774 \uB2E4\uB978 \uAC00\uC871 \uACC4\uC815\uC5D0 \uB300\uD55C \uC694\uCCAD" },
+  unverified_device: { kind: "takeover", label: "\uB4F1\uB85D\uB418\uC9C0 \uC54A\uC740 \uAE30\uAE30\uC5D0\uC11C \uC628 \uC694\uCCAD" },
+  actor_mismatch: { kind: "takeover", label: "\uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0B8 \uC0AC\uB78C\uACFC \uC2E4\uD589\uC744 \uC694\uCCAD\uD55C \uC0AC\uB78C\uC774 \uB2E4\uB984" },
+  not_family: { kind: "hacking", label: "\uAC00\uC871\uC774 \uC544\uB2CC \uACF3\uC5D0\uC11C \uC628 \uC2E4\uD589 \uC694\uCCAD" },
+  owner_mismatch: { kind: "hacking", label: "\uB77C\uC6B0\uD130\uAC00 \uC815\uD55C \uACC4\uC815 \uC8FC\uC778\uACFC \uC2E4\uC81C \uC2E4\uD589 \uB300\uC0C1\uC774 \uB2E4\uB984" },
+  audit_tampered: { kind: "hacking", label: "\uAC10\uC0AC \uAE30\uB85D \uC704\uBCC0\uC870" },
+  intent_mismatch: { kind: "contamination", label: "\uB77C\uC6B0\uD130 \uBD84\uB958\uC640 \uC2E4\uC81C \uC694\uCCAD\uC774 \uB2E4\uB984" },
+  prompt_injection: { kind: "contamination", label: "\uB370\uC774\uD130 \uC548\uC5D0 AI\uB97C \uD5A5\uD55C \uC9C0\uC2DC\uBB38" }
+};
+function intrusionsFrom(ids) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const id of ids) {
+    const def = INTRUSION_SIGNALS[id];
+    if (def && !seen.has(id)) {
+      seen.add(id);
+      out.push({ id, ...def });
+    }
+  }
+  return out;
+}
+var intrusionKinds = (list) => [...new Set(list.map((i) => INTRUSION_KIND_LABEL[i.kind]))].join("\xB7");
 
 // src/vault.ts
 var ShreddedError = class extends Error {
@@ -3543,8 +3580,11 @@ var FamilyTrust = class {
   #listeners = [];
   #frozen = false;
   #lockCount = 0;
-  /** Forged approvals seen per request. The 2nd one on the same request triggers a lockdown. */
+  /** Forged approvals seen per request. Reaching `impostorStrikeLimit` triggers self-destruct. */
   #impostorStrikes = /* @__PURE__ */ new Map();
+  #impostorStrikeLimit;
+  /** Tampered audit entries already answered by a self-destruct. Any other broken entry triggers a new one. */
+  #knownAuditBreaks = /* @__PURE__ */ new Set();
   constructor(opts) {
     if (opts.members.length < 2) throw new Error("a family needs at least 2 members");
     this.familyId = opts.familyId ?? shortId("family");
@@ -3553,6 +3593,7 @@ var FamilyTrust = class {
     this.#executor = opts.executor ?? ((req) => `${req.summary ?? req.kind} \uC644\uB8CC`);
     this.#judge = opts.judge;
     this.#judgeTimeoutMs = opts.judgeTimeoutMs ?? 12e3;
+    this.#impostorStrikeLimit = Math.max(1, Math.floor(opts.impostorStrikeLimit ?? 1));
     this.vault = new ShredVault(this.#now);
     this.audit = new AuditLog(this.#now);
     for (const m of opts.members) this.#members.set(m.id, m);
@@ -3668,6 +3709,26 @@ var FamilyTrust = class {
       decision = combined.decision;
       judged = { ...verdict, effect: combined.effect };
     }
+    const intrusions = this.#frozen ? [] : intrusionsFrom([
+      ...isMember ? [] : ["not_family"],
+      ...isMember && auth.proof !== void 0 && !verified ? ["unverified_device"] : [],
+      ...decision.signals.map((s) => s.id),
+      ...judged?.signals ?? [],
+      ...this.#auditIntact() ? [] : ["audit_tampered"]
+    ]);
+    if (intrusions.length > 0) {
+      decision = {
+        ...decision,
+        tier: "T3",
+        outcome: "block",
+        notifyFamily: true,
+        sealEvidence: true,
+        reasons: [
+          `\u{1F4A5} \uC678\uBD80 \uCE68\uD574(${intrusionKinds(intrusions)}) \uC758\uC2EC\uC774\uB77C \uC2E4\uD589\uD558\uC9C0 \uC54A\uACE0 FA\uB97C \uC18C\uBA78\uC2DC\uCF1C\uC694.`,
+          ...intrusions.map((i) => `\u2022 ${i.label}`)
+        ]
+      };
+    }
     if (request.kind === "transfer" && decision.outcome !== "block") {
       const eligible = this.#eligibleApprovers(request);
       const excluded = [...this.#members.keys()].filter((m) => !eligible.includes(m));
@@ -3717,7 +3778,8 @@ var FamilyTrust = class {
       const state = decision.outcome === "hold" ? "\uC0AC\uAE30 \uC758\uC2EC\uC73C\uB85C \uBCF4\uB958" : decision.outcome === "block" ? "\uCC28\uB2E8" : "\uAC00\uC871 \uD655\uC778 \uD544\uC694";
       this.#emit("family_alert", `\u{1F468}\u200D\u{1F469}\u200D\u{1F466} \uAC00\uC871 \uC804\uCCB4 \uC54C\uB9BC: ${this.name(request.requester)} \uC694\uCCAD "${what}" \u2192 ${state}`, id);
     }
-    if (decision.sealEvidence) action.evidenceId = await this.#sealEvidence(action);
+    if (decision.sealEvidence) action.evidenceId = await this.#sealEvidence(action, intrusions);
+    if (intrusions.length > 0) await this.#selfDestruct(intrusions);
     await this.#progress(action);
     return action;
   }
@@ -3772,7 +3834,9 @@ var FamilyTrust = class {
   async reject(requestId, memberId, proof, opts = {}) {
     const a = this.#get(requestId);
     if (!this.verifyProof(memberId, proof, this.context(memberId, "reject", requestId))) {
+      this.audit.append("proof_failed", memberId, "\uAC70\uC808 \uAE30\uAE30 \uC99D\uBA85 \uC2E4\uD328", { requestId });
       this.#emit("proof_failed", "\u26A0\uFE0F \uB4F1\uB85D\uB41C \uAE30\uAE30\uAC00 \uC544\uB2CC \uACF3\uC5D0\uC11C \uC628 \uAC70\uC808\uC774\uB77C \uBB34\uC2DC\uD588\uC5B4\uC694.", requestId);
+      await this.#onImpostor(a, memberId);
       return a;
     }
     if (OPEN.includes(a.status)) a.status = "rejected";
@@ -3792,6 +3856,7 @@ var FamilyTrust = class {
   }
   /** Runs scheduled actions that are due and expires linked sessions past their TTL. Call on a timer. */
   async tick() {
+    if (!this.#frozen && !this.#auditIntact()) await this.#selfDestruct(intrusionsFrom(["audit_tampered"]));
     this.vault.sweep();
     for (const [slot, link] of [...this.#links]) {
       if (this.vault.info(link.sessionRecord)?.shredded) {
@@ -3876,13 +3941,64 @@ var FamilyTrust = class {
     });
   }
   // ───────────────────────── lockdown ─────────────────────────
-  /** Anyone can lock. Unlocking takes 2 different family phones. */
+  /**
+   * Fraud response: anyone can lock (e.g. the son flags a scam). Sessions are revoked, family memory
+   * is kept. Unlocking takes 2 different family phones.
+   */
   async lockdown(by, reason) {
     if (this.#frozen) return;
+    const { slots, cancelled } = await this.#revokeAll("lockdown", by, reason);
+    this.#emit(
+      "lockdown",
+      [
+        `\u{1F512} \uAE34\uAE09 \uC7A0\uAE08 (${this.name(by)})`,
+        `\u2022 \uC5F0\uACB0\uB41C \uC11C\uBE44\uC2A4 ${slots}\uAC1C\uC758 \uC138\uC158\uACFC \uC5F4\uC1E0 \uC870\uAC01 \uC18C\uBA78 \u2192 \uC5D0\uC774\uC804\uD2B8\uAC00 \uB354\uB294 \uC5B4\uB5A4 \uACC4\uC815\uB3C4 \uBABB \uC5F4\uC5B4\uC694`,
+        `\u2022 \uC9C4\uD589 \uC911\uC774\uB358 \uC694\uCCAD ${cancelled}\uAC74 \uCDE8\uC18C`,
+        `\u2022 \uAC00\uC871 \uD0A4 \uC7AC\uBC1C\uAE09 (epoch ${this.keys.epoch})`,
+        "\u2022 \uD574\uC81C\uB294 \uAC00\uC871 2\uBA85\uC758 \uAE30\uAE30 \uC99D\uBA85\uC774 \uC788\uC5B4\uC57C \uD574\uC694"
+      ].join("\n")
+    );
+  }
+  /**
+   * Intrusion response: everything the agent could use or leak is destroyed (sessions, key shares,
+   * in-flight requests, task data, family memory). Sealed evidence and the audit chain stay.
+   */
+  async #selfDestruct(intrusions, cause) {
+    if (this.#frozen || intrusions.length === 0) return;
+    if (cause) {
+      const evidenceId = await this.#sealEvidence(cause, intrusions);
+      cause.evidenceId ??= evidenceId;
+    }
+    const memories = this.#memory.length;
+    this.#memory.splice(0);
+    const taskRecords = this.vault.shredWhere((r) => r.tags.some((t) => t.startsWith("task:")), "self_destruct").length;
+    const { slots, cancelled } = await this.#revokeAll(
+      "self_destruct",
+      "fa_agent",
+      `\uC678\uBD80 \uCE68\uD574: ${intrusions.map((i) => i.id).join(", ")}`,
+      { memories, taskRecords }
+    );
+    for (const seq of this.audit.brokenEntries()) this.#knownAuditBreaks.add(seq);
+    this.#emit(
+      "self_destruct",
+      [
+        `\u{1F4A5} \uC678\uBD80 \uCE68\uD574(${intrusionKinds(intrusions)}) \uAC10\uC9C0 \u2192 FA \uC790\uB3D9 \uC18C\uBA78`,
+        ...intrusions.map((i) => `\u2022 \uC6D0\uC778: ${i.label}`),
+        `\u2022 \uC5F0\uACB0\uB41C \uC11C\uBE44\uC2A4 ${slots}\uAC1C\uC758 \uC138\uC158\uACFC \uC5F4\uC1E0 \uC870\uAC01 \uC18C\uBA78 \u2192 \uC5D0\uC774\uC804\uD2B8\uAC00 \uC5B4\uB5A4 \uACC4\uC815\uB3C4 \uC5F4 \uC218 \uC5C6\uC5B4\uC694`,
+        `\u2022 \uC9C4\uD589 \uC911\uC774\uB358 \uC694\uCCAD ${cancelled}\uAC74, \uC791\uC5C5 \uB370\uC774\uD130 ${taskRecords}\uAC74 \uC18C\uBA78`,
+        `\u2022 \uAC00\uC871 \uAE30\uC5B5 ${memories}\uAC74 \uC18C\uBA78 (\uC624\uC5FC\uB410\uC744 \uC218 \uC788\uC5B4\uC11C \uB0A8\uAE30\uC9C0 \uC54A\uC544\uC694)`,
+        `\u2022 \uAC00\uC871 \uD0A4 \uC7AC\uBC1C\uAE09 (epoch ${this.keys.epoch})`,
+        "\u2022 \uB0A8\uC740 \uAC83: \uBD09\uC778\uB41C \uC99D\uAC70\uC640 \uAC10\uC0AC \uAE30\uB85D\uBFD0\uC774\uC5D0\uC694. \uB2E4\uC2DC \uC4F0\uB824\uBA74 \uAC00\uC871 2\uBA85\uC774 \uAE30\uAE30\uB85C \uD655\uC778\uD558\uACE0 \uC11C\uBE44\uC2A4\uB97C \uC0C8\uB85C \uC5F0\uACB0\uD574\uC57C \uD574\uC694."
+      ].join("\n"),
+      cause?.id
+    );
+  }
+  /** Shared by lockdown and self-destruct: revoke every session, cancel open work, re-key, freeze. */
+  async #revokeAll(type, actor, reason, extra = {}) {
     this.#frozen = true;
     this.#lockCount++;
     const slots = [...this.#links.keys()];
-    this.vault.shredWhere((r) => r.tags.includes("session") || r.tags.includes("server_share"), "lockdown");
+    this.vault.shredWhere((r) => r.tags.includes("session") || r.tags.includes("server_share"), type);
     for (const d of this.#devices.values()) for (const s of slots) d.dropShare(s);
     this.#links.clear();
     let cancelled = 0;
@@ -3896,17 +4012,11 @@ var FamilyTrust = class {
     const oldKey = this.keys.familyKey();
     this.keys.rekey();
     await this.#reencryptMemory(oldKey);
-    this.audit.append("lockdown", by, reason, { sessionsShredded: slots.length, cancelled, epoch: this.keys.epoch });
-    this.#emit(
-      "lockdown",
-      [
-        `\u{1F512} \uAE34\uAE09 \uC7A0\uAE08 (${this.name(by)})`,
-        `\u2022 \uC5F0\uACB0\uB41C \uC11C\uBE44\uC2A4 ${slots.length}\uAC1C\uC758 \uC138\uC158\uACFC \uC5F4\uC1E0 \uC870\uAC01 \uC18C\uBA78 \u2192 \uC5D0\uC774\uC804\uD2B8\uAC00 \uB354\uB294 \uC5B4\uB5A4 \uACC4\uC815\uB3C4 \uBABB \uC5F4\uC5B4\uC694`,
-        `\u2022 \uC9C4\uD589 \uC911\uC774\uB358 \uC694\uCCAD ${cancelled}\uAC74 \uCDE8\uC18C`,
-        `\u2022 \uAC00\uC871 \uD0A4 \uC7AC\uBC1C\uAE09 (epoch ${this.keys.epoch})`,
-        "\u2022 \uD574\uC81C\uB294 \uAC00\uC871 2\uBA85\uC758 \uAE30\uAE30 \uC99D\uBA85\uC774 \uC788\uC5B4\uC57C \uD574\uC694"
-      ].join("\n")
-    );
+    this.audit.append(type, actor, reason, { sessionsShredded: slots.length, cancelled, epoch: this.keys.epoch, ...extra });
+    return { slots: slots.length, cancelled };
+  }
+  #auditIntact() {
+    return this.audit.brokenEntries().every((seq) => this.#knownAuditBreaks.has(seq));
   }
   async unlock(approvals) {
     if (!this.#frozen) return true;
@@ -4080,19 +4190,20 @@ var FamilyTrust = class {
   #eligibleApprovers(req) {
     return [...this.#members.keys()].filter((m) => !this.#approverExclusion(req, m));
   }
-  // Someone tried to approve as a family member without that member's device.
-  // 1st time: hold the request, demand one more family device, alert everyone, seal evidence.
-  // 2nd time on the same request: emergency lockdown. (Not on the 1st, so forged
-  // approvals alone can't be used to wipe the family's connections.)
+  // Someone approved or rejected as a family member without that member's device: takeover.
+  // At `impostorStrikeLimit` forged attempts on one request (default 1) FA self-destructs.
+  // With a higher limit, earlier attempts hold the request, ask for one more family device,
+  // alert everyone and seal evidence.
   async #onImpostor(a, claimed) {
-    if (!OPEN.includes(a.status)) return;
+    if (this.#frozen) return;
     const strikes = (this.#impostorStrikes.get(a.id) ?? 0) + 1;
     this.#impostorStrikes.set(a.id, strikes);
     this.audit.append("impostor", claimed, `\uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4 ${strikes}\uD68C`, { requestId: a.id });
-    if (strikes >= 2) {
-      await this.lockdown("FA \uC790\uB3D9 \uAC10\uC9C0", `\uAC19\uC740 \uC694\uCCAD\uC5D0 "${this.name(claimed)}" \uC0AC\uCE6D \uC2B9\uC778 ${strikes}\uD68C`);
+    if (strikes >= this.#impostorStrikeLimit) {
+      await this.#selfDestruct(intrusionsFrom(["impostor_approval"]), a);
       return;
     }
+    if (!OPEN.includes(a.status)) return;
     const wasScheduled = a.status === "scheduled";
     a.status = "held";
     a.executeAfter = void 0;
@@ -4104,12 +4215,12 @@ var FamilyTrust = class {
     };
     this.#emit(
       "family_alert",
-      `\u{1F468}\u200D\u{1F469}\u200D\u{1F466} \uAC00\uC871 \uC804\uCCB4 \uC54C\uB9BC: "${this.name(claimed)}" \uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4 \uAC10\uC9C0 \u2192 "${a.request.summary ?? a.request.kind}" \uBCF4\uB958${wasScheduled ? " (\uC608\uC57D \uC2E4\uD589 \uCDE8\uC18C)" : ""}. \uC774\uC81C \uAC00\uC871 ${a.decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uD655\uC778\uC774 \uD544\uC694\uD574\uC694. \uD55C \uBC88 \uB354 \uC2DC\uB3C4\uB418\uBA74 \uAE34\uAE09 \uC7A0\uAE08\uD574\uC694.`,
+      `\u{1F468}\u200D\u{1F469}\u200D\u{1F466} \uAC00\uC871 \uC804\uCCB4 \uC54C\uB9BC: "${this.name(claimed)}" \uC0AC\uCE6D \uC2B9\uC778 \uC2DC\uB3C4 \uAC10\uC9C0 \u2192 "${a.request.summary ?? a.request.kind}" \uBCF4\uB958${wasScheduled ? " (\uC608\uC57D \uC2E4\uD589 \uCDE8\uC18C)" : ""}. \uC774\uC81C \uAC00\uC871 ${a.decision.approvalsRequired}\uBA85\uC758 \uAE30\uAE30 \uD655\uC778\uC774 \uD544\uC694\uD574\uC694. \uB354 \uC2DC\uB3C4\uB418\uBA74 FA\uB97C \uC790\uB3D9 \uC18C\uBA78\uC2DC\uCF1C\uC694.`,
       a.id
     );
     if (!a.evidenceId) a.evidenceId = await this.#sealEvidence(a);
   }
-  async #sealEvidence(a) {
+  async #sealEvidence(a, intrusions = []) {
     const holders = [...this.#members.keys()];
     const ev = await sealEvidence(
       {
@@ -4123,9 +4234,10 @@ var FamilyTrust = class {
         text: a.request.text,
         context: a.request.context,
         signals: a.decision.signals,
+        intrusions: intrusions.map(({ id, kind }) => ({ id, kind })),
         at: this.#now()
       },
-      { holders, threshold: 2, reason: a.decision.outcome, now: this.#now() }
+      { holders, threshold: 2, reason: intrusions.length > 0 ? "intrusion" : a.decision.outcome, now: this.#now() }
     );
     for (const share of ev.shares) if (share.holder) this.#deliverShare(share.holder, evidenceSlot(ev.id), share, false);
     this.#evidence.set(ev.id, { ...ev, shares: [] });
@@ -4263,6 +4375,8 @@ export {
   FORBIDDEN_ACTIONS,
   FamilyKeyTree,
   FamilyTrust,
+  INTRUSION_KIND_LABEL,
+  INTRUSION_SIGNALS,
   JudgeUnavailableError,
   MemberDevice,
   PROPOSE_ACTION_TOOL,
@@ -4282,6 +4396,8 @@ export {
   failClosedVerdict,
   generateKeyPair,
   heuristicJudge,
+  intrusionKinds,
+  intrusionsFrom,
   newKey,
   f as oneWay,
   openEvidence,
