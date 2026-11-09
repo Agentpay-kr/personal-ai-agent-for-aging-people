@@ -24,7 +24,7 @@
 | TypeScript | 통과 | `pnpm typecheck` |
 | iOS·Android·Web JS/리소스 export | 통과 | 최신 Yellow Buddy 디자인·실제 연결 코드의 3개 플랫폼 export, `../design/VERIFICATION.md` |
 | 실제 Vercel 모델 API 응답 | 통과 | `gateway-model-smoke-report.json`: 실제 모바일 HTTP 클라이언트 → 임시 Node live 서버 → Gateway `openai/gpt-5-mini`, 한국어 응답·문자 초안·요청 중복 방지·가족별 격리 |
-| 실제 가족별 Android VM | 설정 완료·실행 보류 | 엄마의 저장형 Android 배정. 사용자 요청으로 시작하지 않았음. 아빠·자녀 VM은 미배정 |
+| 실제 엄마 Android VM | 통과 | `letsur-android-live-report.json`: 실제 Letsur → 승인 → 설정 앱 전경 확인 → 화면 API → RN Web 뷰어 표시. 종료 stopped·실행 세션 0 확인. 아빠·자녀 VM은 미배정 |
 | APK/IPA·기기 설치 | 미검증 | 현재 PC에 Android SDK/JDK 또는 iOS 빌드 환경 없음 |
 
 테스트 API 화면에는 실제 가족·계정·비용 발생이 없다. 테스트 화면 캡처를 실제 VM 실행이나 모델 응답 증거로 사용하지 않는다. 모델·VM 최종 연결 현황은 `../live-api-handoff.md`에서 별도로 관리한다.
@@ -38,3 +38,5 @@ Vercel Gateway 검증은 실제 외부 모델 API를 호출했다. 두 한국어
 외부 Gateway 재검증은 제품 루트 `molla-app`에서 `node --env-file=.env apps/mobile/scripts/verify-gateway-model.mjs`를 실행한다. 이 명령은 실제 모델 사용량이 발생하므로 일반 테스트 묶음에는 포함하지 않는다.
 
 최종 실기기 확인: 개인키 저장/삭제, 앱 재실행, 앱 잠금·복귀, 키보드·읽어주기·햅틱, 가족 계정 분리, 네트워크 단절 중 작업 상태, VM 종료/비용, 소유자 직접 로그인과 외부 실행 결과를 확인해야 한다.
+
+2026-11-09 13:10–13:12 KST 실제 VM 검증: 사용자 승인 한도 3분 / US$0.15. 단일 저장형 엄마 Android에서 Letsur `gpt-4.1-mini`가 설정 앱 열기를 계획했고, 승인 후 `com.android.settings` 전경과 720×1280 실제 캡처를 확인했다. 같은 캡처가 앱의 PC 검토 화면에서 디코딩·표시되었다. 시작 요청 약 58초 후 종료 요청, 약 100초 후 종료 확인. VM 크레딧 차감 US$0.05. 최종 활성 세션 0. 실제 휴대폰에 앱을 설치해 검증한 것은 아니다.

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FA tech slide</title>
+<style>
+  :root{
+    --bg:#FFFFFF; --ink:#111111; --muted:#5B5B5B; --line:#E6E3DA;
+    --yellow:#FEE500; --yellow-soft:#FFF7B3; --panel:#FAF9F4; --red:#D23B2F; --green:#1F8A4C;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"SF Pro Display","Helvetica Neue","Apple SD Gothic Neo",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .slide{position:relative;width:1920px;height:1080px;padding:52px 80px 70px;display:flex;flex-direction:column}
+  .top{display:flex;align-items:flex-end;justify-content:space-between}
+  .eyebrow{display:inline-flex;align-items:center;gap:12px;font-size:22px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+  .eyebrow .dot{width:14px;height:14px;border-radius:50%;background:var(--yellow);border:2px solid var(--ink)}
+  h1{font-size:60px;font-weight:800;letter-spacing:-.02em;line-height:1.05;margin-top:14px}
+  h1 .hl{background:linear-gradient(transparent 55%,var(--yellow) 55%)}
+  .sub{font-size:24px;color:var(--muted);margin-top:10px;font-weight:500}
+  .tag{font-size:20px;font-weight:600;color:var(--muted);text-align:right;line-height:1.5}
+
+  .flow{margin-top:36px;display:grid;grid-template-columns:1fr 36px 1fr 36px 1.25fr 36px 1.15fr 36px 1fr;align-items:stretch;gap:0}
+  .node{background:var(--panel);border:2px solid var(--line);border-radius:22px;padding:20px 22px;display:flex;flex-direction:column;min-height:0}
+  .node.code{border-color:var(--ink);background:var(--yellow-soft)}
+  .node .k{font-size:17px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .node.code .k{color:#6B5A00}
+  .node h3{font-size:28px;font-weight:800;margin-top:8px;line-height:1.1;letter-spacing:-.01em}
+  .node ul{list-style:none;margin-top:14px;display:flex;flex-direction:column;gap:9px}
+  .node li{font-size:20px;line-height:1.28;color:#222;padding-left:22px;position:relative}
+  .node li::before{content:"";position:absolute;left:0;top:11px;width:10px;height:10px;border-radius:50%;background:var(--ink)}
+  .node li.mock::before{background:transparent;border:2px solid var(--muted);width:8px;height:8px;top:10px}
+  .node li.mock{color:var(--muted)}
+  .node li b{font-weight:800}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--ink);font-size:34px;font-weight:300}
+  .tiers{margin-top:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding-top:14px}
+  .tier{border-radius:10px;padding:7px 4px;text-align:center;font-size:15px;line-height:1.2;font-weight:700;background:#fff;border:1.5px solid var(--line)}
+  .tier span{display:block;font-size:12.5px;white-space:nowrap;font-weight:600;color:var(--muted);margin-top:3px}
+  .tier.t3{border-color:var(--red);color:var(--red)}
+  .tier.t3 span{color:var(--red)}
+
+  .bottom{margin-top:26px;display:grid;grid-template-columns:1.55fr 1fr;gap:36px;align-items:stretch}
+  .card{border:2px solid var(--line);border-radius:22px;padding:20px 28px}
+  .card h4{font-size:19px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .chips{margin-top:12px;display:flex;flex-wrap:wrap;gap:10px}
+  .chip{border:2px solid var(--ink);border-radius:999px;padding:8px 16px;font-size:20px;font-weight:700;line-height:1.1;background:#fff}
+  .chip small{display:block;font-size:16px;font-weight:500;color:var(--muted);margin-top:3px}
+  .stats{display:flex;gap:28px;margin-top:8px;align-items:flex-end}
+  .stat .n{font-size:56px;font-weight:800;letter-spacing:-.03em;line-height:1}
+  .stat .l{font-size:19px;color:var(--muted);font-weight:600;margin-top:6px}
+  .fine{margin-top:10px;font-size:16.5px;line-height:1.4;color:var(--muted)}
+  .fine b{color:var(--ink)}
+  .fine .ok{color:var(--green);font-weight:800}
+  .fine .mk{color:var(--muted);font-weight:800}
+  .foot{position:absolute;left:80px;right:80px;bottom:22px;display:flex;justify-content:space-between;font-size:17px;color:var(--muted);font-weight:500}
+</style>
+</head>
+<body>
+<div class="slide">
+  <div class="top">
+    <div>
+      <div class="eyebrow"><span class="dot"></span>FA · FAMILY AI AGENT · HOW IT WORKS</div>
+      <h1>The LLM <span class="hl">proposes</span>. Code <span class="hl">decides</span>.</h1>
+      <div class="sub">Every risky step is visible to the family and gated by cryptography, not by the model's judgment.</div>
+    </div>
+    <div class="tag">c0mpiled-17 Seoul · Nov 9, 2026<br>YC RFS: AI for the Aging Population</div>
+  </div>
+
+  <div class="flow">
+    <div class="node">
+      <div class="k">1 · Family chat</div>
+      <h3>Parents' group chat</h3>
+      <ul>
+        <li>Son: "Mom, clean up your subscriptions"</li>
+        <li>Mom logs in on <b>her own phone</b>; password goes to her vault only</li>
+        <li class="mock">KakaoTalk UI is a mockup · Yellow Buddy mobile app (Expo)</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node">
+      <div class="k">2 · Agent</div>
+      <h3>Claude tool-use</h3>
+      <ul>
+        <li>Picks an action, calls <b>propose_action</b></li>
+        <li>Requester is pinned by the engine, not the prompt</li>
+        <li>Scripted fallback when the API refuses</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node code">
+      <div class="k">3 · Policy gate (code)</div>
+      <h3>Deterministic rules</h3>
+      <ul>
+        <li>Risk tier + Korean scam signals: fake authority, "safe account", secrecy, child impersonation, gift cards, remote-control apps</li>
+        <li>LLM risk score can only <b>raise</b> risk</li>
+      </ul>
+      <div class="tiers">
+        <div class="tier">T0 read<span>auto</span></div>
+        <div class="tier">T1 small<span>owner tap</span></div>
+        <div class="tier">T2 money<span>owner + 1</span></div>
+        <div class="tier t3">T3 never<span>loans · OTP</span></div>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node">
+      <div class="k">4 · Family approval</div>
+      <h3>2-of-3, proven devices</h3>
+      <ul>
+        <li>Owner + one family member; the <b>receiver can't approve</b></li>
+        <li>Phones prove identity with <b>Schnorr ZK proofs</b>; a new number can't vote</li>
+        <li>Scam suspected → hold, alert everyone, seal evidence, lock</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node">
+      <div class="k">5 · Owner's workspace</div>
+      <h3>Run, then shred</h3>
+      <ul>
+        <li>Session key rebuilt from <b>2-of-3 Shamir shares</b> (phone · server · guardian)</li>
+        <li>Runs in the owner's VM; Android adapter via ADB</li>
+        <li>Task data <b>crypto-shredded</b>; evidence of scams kept sealed</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="card">
+      <h4>Trust core · fa-trust</h4>
+      <div class="chips">
+        <div class="chip">Shamir 2-of-3<small>GF(2^521−1) · even our server can't act alone</small></div>
+        <div class="chip">Schnorr ZK device proof<small>secp256k1 · Fiat–Shamir · replay-safe</small></div>
+        <div class="chip">Hierarchical family keys<small>HKDF one-way · re-key when someone leaves</small></div>
+        <div class="chip">Crypto-shredding vault<small>AES-256-GCM per record · 30-day TTL</small></div>
+        <div class="chip">Evidence sealing + audit<small>2-of-3 sealed · SHA-256 hash chain</small></div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Built today · 5 packages · 8 PRs</h4>
+      <div class="stats">
+        <div class="stat"><div class="n">158</div><div class="l">automated tests passing</div></div>
+        <div class="stat"><div class="n">0</div><div class="l">real won moved</div></div>
+      </div>
+      <div class="fine">
+        fa-trust 30 · fa-engine 26 · kakao demo 21 · molla-cli 15 · molla-app server 66<br>
+        <span class="ok">Real:</span> <b>all crypto, policy decisions, scam detection, Claude agent, Letsur/Vercel models.</b>
+        <span class="mk">Mocked:</span> KakaoTalk UI, VM actions. Transfers end as drafts; FA only holds, verifies and alerts.
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>github.com/him55710-sudo/personal-ai-agent-for-aging-people</div>
+    <div>FA — AI help for parents, with family guardrails</div>
+  </div>
+</div>
+</body>
+</html>

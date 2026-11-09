@@ -1,4 +1,5 @@
 import { avatar, groupAvatar, icon, people } from './visual.mjs';
+import { faMention, mentionsFa } from './mentions.mjs';
 import { canSee, isCurrentCard } from './scenario.mjs';
 
 const $ = selector => document.querySelector(selector);
@@ -24,7 +25,7 @@ function initial() {
   return {actor:'son', active:'family', routerDemoId:crypto.randomUUID(), rooms:[
     makeRoom('family', '우리 가족', ['son','mom','dad'], [
       seed('mom', '요즘 어디에 뭘 구독했는지 모르겠네.\n휴대폰으로 매달 결제 문자가 여러 개 와.', '오전 11:08'),
-      seed('son', '엄마, 다음에 갈 때까지 기다리지 말고\n여기서 같이 정리해 보자. FA를 초대할게!', '오전 11:09'),
+      seed('son', '엄마, 다음에 갈 때까지 기다리지 말고\n여기서 같이 정리해 보자. 치즈를 초대할게!', '오전 11:09'),
       seed('dad', '그래, 다 같이 여기서 보면 되겠다 😊', '오전 11:10'),
     ]),
     makeRoom('aunt', '이모', ['son','aunt'], [seed('aunt', '다음 주에 시간 되면 들러 😊', '오전 10:24')]),
@@ -140,14 +141,14 @@ function renderSidebar() {
 function renderCard(card, item, index) {
   if (card.kind === 'input') {
     const done = card.done || card.expired;
-    return `<section class="fa-card"><div class="card-body"><div class="card-kicker">${icon('edit',15)} FA 입력 요청</div><strong>${esc(card.title)}</strong><p>${esc(card.description)}</p></div>
+    return `<section class="fa-card"><div class="card-body"><div class="card-kicker">${icon('edit',15)} 치즈의 입력 요청</div><strong>${esc(card.title)}</strong><p>${esc(card.description)}</p></div>
       <div class="card-actions">${done ? `<span class="card-status">${card.expired ? '종료된 요청' : '입력 완료'}</span>` :
         actionButton('입력하기','agent-input','primary',`data-index="${index}" ${card.owner !== state.actor ? 'disabled' : ''}`)}</div></section>`;
   }
   const locked = !isCurrentCard(card, item.flow);
   const rows = card.rows?.length ? `<dl>${card.rows.map(row => `<div><dt>${esc(row.label)}</dt><dd>${esc(row.detail)}</dd></div>`).join('')}</dl>` : '';
   const requiresOwner = card.audience && state.actor !== card.audience;
-  const cardLabels = {welcome:['bot','FA 시작하기'],login:['lock','계정 연결 요청'],scope:['shield','권한 요청'],ready:['shield','연결 완료'],subscriptions:['list','구독 조회 결과'],approval:['shield','승인 요청'],result:['check','작업 완료'],blocked:['lock','권한 확인']};
+  const cardLabels = {welcome:['bot','치즈와 시작하기'],login:['lock','계정 연결 요청'],scope:['shield','권한 요청'],ready:['shield','연결 완료'],subscriptions:['list','구독 조회 결과'],approval:['shield','승인 요청'],result:['check','작업 완료'],blocked:['lock','권한 확인']};
   const [symbol, title] = cardLabels[card.kind] || ['info','Family AI Agent'];
   return `<section class="fa-card card-${esc(card.kind)}"><div class="card-body">
     <div class="card-kicker">${icon(symbol,15)} ${title}${card.audience ? `<span class="card-audience">${esc(label(card.audience))} 전용</span>` : ''}</div>
@@ -165,8 +166,9 @@ function messageHTML(message, item, index) {
   const self = message.by === state.actor;
   const unread = message.unreadBy?.length || 0;
   const meta = `<span class="message-meta">${unread ? `<span class="message-unread" aria-label="읽지 않은 사람 ${unread}명">${unread}</span>` : ''}<time>${esc(message.time || '')}</time></span>`;
-  return `<article class="message ${self ? 'mine' : 'theirs'}" aria-label="${esc(label(message.by))}의 메시지">
-    ${self ? '' : avatar(message.by, 39)}
+  const expression = message.card?.kind === 'result' ? 'happy' : 'profile';
+  return `<article class="message ${self ? 'mine' : 'theirs'}" data-sender="${esc(message.by)}" aria-label="${esc(label(message.by))}의 메시지">
+    ${self ? '' : avatar(message.by, 39, expression)}
     <div class="message-content">
       ${self ? '' : `<div class="sender">${esc(label(message.by))}${message.by === 'fa' ? '<span>Family AI Agent</span>' : ''}</div>`}
       ${message.text ? `<div class="bubble-line"><div class="bubble">${esc(message.text)}</div>${message.card ? '' : meta}</div>` : ''}
@@ -185,7 +187,7 @@ function drawer(item) {
   const bot = item.members.includes('fa');
   if (panel === 'bot') return `<aside class="drawer" aria-label="챗봇">
     <header><h2>챗봇</h2>${button('close','챗봇 메뉴 닫기','close-panel')}</header>
-    <div class="drawer-bot">${avatar('fa',44)}<div><strong>FA</strong><small>Family AI Agent</small></div><span class="tag">참여 중</span></div>
+    <div class="drawer-bot">${avatar('fa',44)}<div><strong>${label('fa')}</strong><small>${people.fa.description}</small></div><span class="tag">참여 중</span></div>
     ${menuRow('exit','챗봇 내보내기','remove-fa')}</aside>`;
   return `<aside class="drawer" aria-label="채팅방 메뉴"><header><h2>채팅방 메뉴</h2>${button('close','채팅방 메뉴 닫기','close-panel')}</header>
     <div class="drawer-scroll">
@@ -193,7 +195,7 @@ function drawer(item) {
       ${menuRow('invite','대화상대 초대','invite')}
       <div class="drawer-members">${item.members.map(id => `<div>${avatar(id,32)}<span>${label(id)}</span>${id === state.actor ? '<small>나</small>' : ''}</div>`).join('')}</div>
       <div class="drawer-settings">
-        ${bot ? menuRow('bot','챗봇','bots','<span class="row-detail">FA 참여 중</span>') : ''}
+        ${bot ? menuRow('bot','챗봇','bots','<span class="row-detail">치즈 참여 중</span>') : ''}
         ${menuRow('edit','채팅방 이름 변경','rename')}
         ${menuRow('pin',pref.pinned ? '상단 고정 해제' : '채팅방 상단 고정','pin')}
         ${menuRow(pref.muted ? 'muted' : 'bell',pref.muted ? '채팅방 알림 켜기' : '채팅방 알림 끄기','mute')}
@@ -217,7 +219,7 @@ function renderMessages(keepScroll = false) {
   target.innerHTML = `
     <div class="date-pill">${search ? '대화 검색 결과' : dateLabel}</div>
     ${content || `<div class="no-messages">${search ? '일치하는 메시지가 없어요.' : '첫 메시지를 보내 대화를 시작해 보세요.'}</div>`}
-    ${!search && pending.has(item.id) ? '<div class="thinking" role="status"><span></span><span></span><span></span><span class="sr-only">FA가 응답하는 중</span></div>' : ''}`;
+    ${!search && pending.has(item.id) ? `<div class="thinking" role="status">${avatar('fa',30,'thinking')}<span>치즈가 확인 중이에요.</span></div>` : ''}`;
   target.scrollTop = search ? 0 : keepScroll ? oldTop : target.scrollHeight;
 }
 
@@ -347,7 +349,7 @@ function renderComposeTools() {
     tools.innerHTML = `<div class="emoji-list">${['😊','👍','❤️','🌷','😂','🙌','🙏','🎉'].map(emoji => `<button type="button" data-action="insert" data-value="${emoji}" aria-label="${emoji} 입력">${emoji}</button>`).join('')}</div>`;
   } else if (composeTools === 'mention' || composeTools === 'more') {
     tools.innerHTML = item.members.includes('fa')
-      ? `<button type="button" class="tool-choice" data-action="mention-fa">${avatar('fa',30)}<span><strong>@FA</strong><small>Family AI Agent에게 메시지 보내기</small></span></button>`
+      ? `<button type="button" class="tool-choice" data-action="mention-fa">${avatar('fa',30)}<span><strong>${faMention}</strong><small>치즈에게 메시지 보내기</small></span></button>`
       : `<button type="button" class="tool-choice" data-action="invite">${icon('invite',21)}<span>대화상대 초대하기</span></button>`;
   }
 }
@@ -394,7 +396,7 @@ async function runFA(item, operation) {
 }
 
 function isAgentQuestion(text) {
-  return /(?:^|\s)@?FA(?:\b|$)/i.test(text) || /[?？]$/.test(text) ||
+  return mentionsFa(text) || /[?？]$/.test(text) ||
     /(?:줘|주세요|줄래|알려 줘요|해 줘요|뭐야|뭐예요|뭐니|인가요|나요|까요|안녕|안녕하세요)[.!。！]?$/.test(text);
 }
 
@@ -553,7 +555,7 @@ function renderDialog() {
       break;
     }
     case 'input':
-      title = 'FA 입력 요청';
+      title = '치즈의 입력 요청';
       body = `<div class="dialog-body private-input"><div class="input-context">${icon('edit',19)} 요청한 정보</div>
         <p>${esc(modal.card.description)}</p><label>${esc(modal.card.title)}<input name="answer" class="form-field" maxlength="180" required autocomplete="off" placeholder="내용을 입력하세요"></label>
         <p class="field-note">이 내용은 가족톡과 연결된 응답 모드에 전달돼요.</p></div>${dialogActions('보내기')}`;
@@ -565,7 +567,7 @@ function renderDialog() {
       break;
     case 'remove-fa':
       title = '챗봇 내보내기';
-      body = `<div class="dialog-body"><p>FA를 내보내면 이 방의 데모 계정 연결과 진행 중인 권한 요청이 초기화돼요.</p></div>${dialogActions('내보내기', false, true)}`;
+      body = `<div class="dialog-body"><p>치즈를 내보내면 이 방의 데모 계정 연결과 진행 중인 권한 요청이 초기화돼요.</p></div>${dialogActions('내보내기', false, true)}`;
       break;
     case 'reset':
       title = '처음부터 다시 시연';
@@ -574,10 +576,11 @@ function renderDialog() {
     case 'guide':
       title = '발표 시연 안내';
       body = `<div class="dialog-body guide-body"><p>상단의 <strong>보는 사람</strong>에서 가족 구성원의 화면을 바꿀 수 있어요.</p>
-        <ol><li><strong>아들</strong> 화면에서 우리 가족 방을 열고 방 이름 아래 <strong>참여자 수 → 대화상대 초대하기</strong>를 누르세요. 친구 목록에서 <strong>FA</strong>를 선택하고 <strong>확인</strong>을 누르세요.</li>
-        <li>FA에 <strong>“엄마 구독 좀 정리해줘”</strong>를 보내세요. <strong>엄마</strong>로 바꿔 우리 가족 방을 열고, 샘플 계정을 연결한 뒤 목록 조회를 허용하세요.</li>
+        <div class="guide-cheese">${avatar('fa',64)}<div><strong>우리 가족 AI 도우미, 치즈</strong><p>치즈~ 같이 해볼까요?</p></div></div>
+        <ol><li><strong>아들</strong> 화면에서 우리 가족 방을 열고 방 이름 아래 <strong>참여자 수 → 대화상대 초대하기</strong>를 누르세요. 친구 목록에서 <strong>치즈</strong>를 선택하고 <strong>확인</strong>을 누르세요.</li>
+        <li>치즈에게 <strong>“엄마 구독 좀 정리해줘”</strong>를 보내세요. <strong>엄마</strong>로 바꿔 우리 가족 방을 열고, 샘플 계정을 연결한 뒤 목록 조회를 허용하세요.</li>
         <li><strong>아들</strong>로 바꿔 우리 가족 방에서 구독 목록을 보고 해지를 요청하세요. <strong>엄마</strong>가 방을 열고 해지를 승인하면 결과가 가족톡에 공유돼요.</li></ol>
-        <p class="field-note">FA에게 일반 질문을 하거나 @FA로 부를 수 있어요. LLM API를 설정하면 해당 대화가 모델에 전달돼요.</p>
+        <p class="field-note">치즈에게 일반 질문을 하거나 @치즈로 부를 수 있어요. LLM API를 설정하면 해당 대화가 모델에 전달돼요.</p>
         </div><footer class="dialog-actions">${actionButton('처음부터 다시 시연','reset')}${actionButton('닫기','close-dialog','primary')}</footer>`;
       break;
   }
@@ -654,7 +657,7 @@ function commitDialog(event) {
       retireRouter(item);
       rotateRouter(item);
       item.members = item.members.filter(id => id !== 'fa');
-      append(item,[{by:'system',text:'FA가 채팅방에서 나갔습니다.'}]);
+      append(item,[{by:'system',text:'치즈가 채팅방에서 나갔습니다.'}]);
       panel = '';
       break;
     case 'reset':
@@ -775,7 +778,7 @@ function handleAction(action, element) {
       const message = item?.messages[Number(element.dataset.index)];
       const card = message?.card;
       if (card?.kind === 'input' && canSee(message, state.actor) && !card.done && !card.expired && card.owner === state.actor) {
-        if (pending.has(item.id)) return showToast('FA가 답변한 뒤에 입력해 주세요.');
+        if (pending.has(item.id)) return showToast('치즈가 답변한 뒤에 입력해 주세요.');
         openDialog('input',{card});
       }
       break;
@@ -790,7 +793,7 @@ function handleAction(action, element) {
     case 'mention-fa':
     case 'insert': {
       const draft = $('#draft');
-      const value = action === 'mention-fa' ? '@FA ' : element.dataset.value;
+      const value = action === 'mention-fa' ? faMention + ' ' : element.dataset.value;
       if (!draft) break;
       if (action === 'mention-fa' && draft.value.endsWith('@')) draft.value = draft.value.slice(0,-1);
       draft.value += value;

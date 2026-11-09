@@ -102,6 +102,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .tag { padding: 3px 8px; border-radius: 99px; background: #f3f0ea; font-size: 10px; color: #645d52; white-space: nowrap; }
 
 .avatar { border-radius: 38%; flex: none; display: block; }
+.avatar-empty { width: 48px; height: 48px; display: grid; place-items: center; background: #eee8df; color: #675c53; }
 .group-avatar { width: 48px; height: 48px; position: relative; flex: none; display: block; }
 .group-avatar .avatar { position: absolute; width: 24px; height: 24px; border: 1.5px solid #fff; }
 .group-2 .avatar { width: 31px; height: 31px; }
@@ -168,8 +169,9 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .card-result .card-kicker { color: #336b4e; }
 .card-blocked .card-kicker { color: #87423c; }
 .no-messages, .thinking { color: #293f54; margin: 12px; text-align: center; font-size: 13px; }
-.thinking { display: flex; justify-content: center; align-items: center; gap: 5px; width: 47px; height: 30px; border-radius: 10px; background: #fff; }
-.thinking span:not(.sr-only) { width: 5px; height: 5px; border-radius: 50%; background: #738499; }
+.thinking { display: flex; align-items: center; gap: 7px; width: fit-content; padding: 4px 10px 4px 5px; border-radius: 12px; background: #fffdf7; color: #3b2f2a; }
+.guide-cheese { display: flex; align-items: center; gap: 12px; padding: 10px; margin-bottom: 14px; border-radius: 16px; background: #fff6e0; color: #3b2f2a; }
+.guide-cheese p { margin: 3px 0 0; color: #9a3b20; }
 .chat-empty { margin: auto; text-align: center; display: grid; justify-items: center; gap: 9px; color: #2e4254; padding: 18px; }
 .chat-empty h2 { color: #263847; font-size: 21px; }
 .chat-empty p { margin: 0 0 4px; }

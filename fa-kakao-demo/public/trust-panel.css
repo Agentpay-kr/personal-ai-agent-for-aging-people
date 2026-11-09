@@ -1,13 +1,13 @@
 /* fa-trust panel: opens when FA is tapped in a chat */
 
 /* FA's profile, name and bubble are tappable */
-article.message.theirs[aria-label^="FA의"] > .avatar,
-article.message.theirs[aria-label^="FA의"] .sender,
-article.message.theirs[aria-label^="FA의"] .bubble,
+article.message.theirs[data-sender="fa"] > .avatar,
+article.message.theirs[data-sender="fa"] .sender,
+article.message.theirs[data-sender="fa"] .bubble,
 .drawer-bot { cursor: pointer; }
-article.message.theirs[aria-label^="FA의"] > .avatar { position: relative; }
+article.message.theirs[data-sender="fa"] > .avatar { position: relative; }
 /* Small shield hint on FA's profile when there are new security records */
-body.trust-unseen article.message.theirs[aria-label^="FA의"] .sender::after {
+body.trust-unseen article.message.theirs[data-sender="fa"] .sender::after {
   content: '🛡️ 새 보안 기록'; margin-left: 6px; font-size: 10px; font-weight: 600;
   color: #b42318; background: #fff1f0; border-radius: 999px; padding: 1px 6px;
 }

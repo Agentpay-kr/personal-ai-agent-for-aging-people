@@ -32,22 +32,24 @@ export const people = {
   son: {name:'아들', description:'가족의 디지털 도우미', color:'#dce9ff', ink:'#2a4569', skin:'#ffcdac', hair:'#223858', drawing:'<path d="M11 23V15c0-9 18-10 19 0v8c-3-1-4-4-6-8-3 4-7 5-13 5z" fill="#223858"/>'},
   mom: {name:'엄마', description:'오늘도 좋은 하루 🌷', color:'#f7d9d7', ink:'#943f57', skin:'#ffd6b8', hair:'#53394c', drawing:'<path d="M10 23c-5-3-3-11 1-13 3-5 15-6 19 1 5 1 5 10 1 13l-3-7c-6 1-10-2-11-4-2 4-4 6-7 7z" fill="#53394c"/>'},
   dad: {name:'아빠', description:'걷기 좋은 날', color:'#dce9dc', ink:'#426a54', skin:'#ebba93', hair:'#4b514d', drawing:'<path d="M11 19V14c0-8 17-10 19-1v5l-3-4c-4 2-10 3-16 2z" fill="#4b514d"/><path d="M12 21h7v4h-7zm10 0h7v4h-7zm-3 2h3" fill="none" stroke="#4b514d" stroke-width="1"/>'},
-  fa: {name:'FA', description:'Family AI Agent', color:'#ffe54b'},
+  fa: {name:'치즈', description:'우리 가족 AI 도우미 (FA)'},
   aunt: {name:'이모', description:'주말에 차 한잔 ☕', color:'#f0ddf8', ink:'#836298', skin:'#f7caac', hair:'#653a35', drawing:'<path d="M10 22v-6c0-10 19-12 20 0v7c-2-2-4-6-4-8-4 3-8 4-16 4z" fill="#653a35"/>'},
   friend: {name:'지민', description:' ', color:'#fae4cf', ink:'#bd674f', skin:'#dca47b', hair:'#553627', drawing:'<path d="M10 20v-5c0-9 19-10 20 1v5c-3-2-6-5-7-8-5 5-9 6-13 7z" fill="#553627"/>'}
 };
 
-export function avatar(id, size = 42) {
+export function avatar(id, size = 42, expression = 'profile') {
   const p = people[id];
   if (!p) return '';
-  const drawing = id === 'fa'
-    ? '<path d="M20 9c-7 0-12 4.5-12 10 0 3 1.5 5.4 4.1 7.3l-1.4 5.1 5.5-3a15 15 0 0 0 3.8.5c7 0 12-4.5 12-10S27 9 20 9z" fill="#342715"/><path d="M20 13.5c.5 4.2 1.3 5 5.5 5.5-4.2.5-5 1.3-5.5 5.5-.5-4.2-1.3-5-5.5-5.5 4.2-.5 5-1.3 5.5-5.5z" fill="#ffe54b"/>'
-    : `<path d="M3 41c1-8 7-12 17-12s16 4 17 12" fill="${p.ink}"/><path d="M17 25h6v7l-3 2-3-2z" fill="${p.skin}"/><path d="M10.5 18c0-6 4-9 9.5-9s9.5 3 9.5 9v4c0 5-4 8-9.5 8s-9.5-3-9.5-8z" fill="${p.skin}"/>${p.drawing}<path d="M16 22h.1m7.9 0h.1m-5.4 3.5q1.3 1.2 2.6 0" stroke="#53372e" fill="none" stroke-width="1.25" stroke-linecap="round"/>`;
+  if (id === 'fa') {
+    return `<img class="avatar" src="/cheese/${expression}.svg" width="${size}" height="${size}" alt="" aria-hidden="true">`;
+  }
+  const drawing = `<path d="M3 41c1-8 7-12 17-12s16 4 17 12" fill="${p.ink}"/><path d="M17 25h6v7l-3 2-3-2z" fill="${p.skin}"/><path d="M10.5 18c0-6 4-9 9.5-9s9.5 3 9.5 9v4c0 5-4 8-9.5 8s-9.5-3-9.5-8z" fill="${p.skin}"/>${p.drawing}<path d="M16 22h.1m7.9 0h.1m-5.4 3.5q1.3 1.2 2.6 0" stroke="#53372e" fill="none" stroke-width="1.25" stroke-linecap="round"/>`;
   return `<svg class="avatar" aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 40 40" style="background:${p.color}">${drawing}</svg>`;
 }
 
 export function groupAvatar(ids) {
   const visible = ids.slice(0, 4);
-  if (visible.length < 2) return avatar(visible[0] || 'fa', 48);
+  if (visible.length === 0) return `<span class="avatar avatar-empty" aria-hidden="true">${icon('chat', 22)}</span>`;
+  if (visible.length === 1) return avatar(visible[0], 48);
   return `<span class="group-avatar group-${visible.length}">${visible.map(id => avatar(id, 24)).join('')}</span>`;
 }
