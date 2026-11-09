@@ -142,6 +142,8 @@ export class FamilyTrust {
   #listeners: Array<(e: TrustEvent) => void> = [];
   #frozen = false;
   #lockCount = 0;
+  /** Forged approvals seen per request. The 2nd one on the same request triggers a lockdown. */
+  readonly #impostorStrikes = new Map<string, number>();
 
   constructor(opts: FamilyTrustOptions) {
     if (opts.members.length < 2) throw new Error('a family needs at least 2 members');
@@ -305,6 +307,7 @@ export class FamilyTrust {
         `⚠️ "${this.name(memberId)}" 이름으로 승인이 왔지만 등록된 기기의 ZK 증명이 아니에요. 무시하고 기록했어요.`,
         requestId,
       );
+      await this.#onImpostor(a, memberId);
       return a;
     }
     if (this.#frozen) {
@@ -680,6 +683,39 @@ export class FamilyTrust {
     } finally {
       key.fill(0);
     }
+  }
+
+  // Someone tried to approve as a family member without that member's device.
+  // 1st time: hold the request, demand one more family device, alert everyone, seal evidence.
+  // 2nd time on the same request: emergency lockdown. (Not on the 1st, so forged
+  // approvals alone can't be used to wipe the family's connections.)
+  async #onImpostor(a: PendingAction, claimed: MemberId): Promise<void> {
+    if (!OPEN.includes(a.status)) return;
+    const strikes = (this.#impostorStrikes.get(a.id) ?? 0) + 1;
+    this.#impostorStrikes.set(a.id, strikes);
+    this.audit.append('impostor', claimed, `사칭 승인 시도 ${strikes}회`, { requestId: a.id });
+
+    if (strikes >= 2) {
+      await this.lockdown('FA 자동 감지', `같은 요청에 "${this.name(claimed)}" 사칭 승인 ${strikes}회`);
+      return;
+    }
+
+    const wasScheduled = a.status === 'scheduled';
+    a.status = 'held';
+    a.executeAfter = undefined;
+    a.decision = {
+      ...a.decision,
+      approvalsRequired: a.decision.approvalsRequired + 1,
+      notifyFamily: true,
+      reasons: [...a.decision.reasons, '🎭 사칭 승인 시도가 있어서 가족 1명의 기기 확인이 더 필요해요.'],
+    };
+    this.#emit(
+      'family_alert',
+      `👨‍👩‍👦 가족 전체 알림: "${this.name(claimed)}" 사칭 승인 시도 감지 → "${a.request.summary ?? a.request.kind}" 보류` +
+        `${wasScheduled ? ' (예약 실행 취소)' : ''}. 이제 가족 ${a.decision.approvalsRequired}명의 기기 확인이 필요해요. 한 번 더 시도되면 긴급 잠금해요.`,
+      a.id,
+    );
+    if (!a.evidenceId) a.evidenceId = await this.#sealEvidence(a);
   }
 
   async #sealEvidence(a: PendingAction): Promise<string> {

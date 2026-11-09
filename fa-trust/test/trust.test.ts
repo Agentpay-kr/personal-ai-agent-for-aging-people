@@ -57,14 +57,39 @@ test('an impostor phone cannot approve, and a proof cannot be replayed', async (
   await trust.linkAccount('mom', 'netflix', 'cookie=abc');
   const a = await trust.request(son, { owner: 'mom', kind: 'cancel_subscription', service: 'netflix' });
   await trust.approveWith(new MemberDevice('mom'), a.id);
-  assert.equal(a.status, 'pending');
+  // The forged approval is ignored, and the request is held for one more family device.
+  assert.equal(a.status, 'held');
   assert.deepEqual(a.approvals, ['son']);
+  assert.equal(a.decision.approvalsRequired, 3);
+  assert.ok(a.evidenceId);
 
   const ctx = trust.context('mom', 'approve', a.id);
   const proof = mom.prove(ctx);
   await trust.approve(a.id, 'mom', proof, mom.shareFor('session:mom:netflix'));
-  assert.equal(a.status, 'executed');
+  assert.equal(a.status, 'held');
   assert.equal(trust.verifyProof('mom', proof, ctx), false);
+});
+
+test('impostor approval: hold + family alert + sealed evidence, a second attempt locks down', async () => {
+  const { trust, mom, dad, events } = setup();
+  await trust.linkAccount('mom', 'bank', 'bank-session');
+  const a = await trust.request(dad, { owner: 'mom', kind: 'transfer', service: 'bank', amountKRW: 500_000, payee: '아빠 계좌', payeeOwner: 'dad', summary: '엄마 → 아빠 50만원' });
+  assert.equal(a.status, 'pending');
+
+  await trust.approve(a.id, 'mom', dad.prove(trust.context('mom', 'approve', a.id)));
+  assert.equal(a.status, 'held');
+  assert.ok(a.evidenceId);
+  assert.ok(events.some((e) => e.type === 'family_alert' && e.message.includes('사칭')));
+  assert.equal(trust.linkedAccounts().length, 1);
+
+  // The real mom can still approve, but one more family device is now required.
+  await trust.approveWith(mom, a.id);
+  assert.equal(a.status, 'held');
+
+  await trust.approve(a.id, 'mom', new MemberDevice('mom').prove(trust.context('mom', 'approve', a.id)));
+  assert.equal(a.status, 'cancelled');
+  assert.equal(trust.linkedAccounts().length, 0);
+  assert.ok(events.some((e) => e.type === 'lockdown'));
 });
 
 test('a non-member request is blocked and sealed as evidence', async () => {

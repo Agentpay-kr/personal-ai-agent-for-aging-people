@@ -85,6 +85,19 @@ test('voice phishing is held, evidence sealed, impostor approval rejected, scam 
   assert.match(unlocked.messages[0].text, /잠금을 풀고/);
 });
 
+test('impostor approval holds a pending transfer; a second attempt locks down', { skip: !trustAvailable() }, async (t) => {
+  const { act, trust, impostor } = await demo(t);
+  await act('dad', 'chat', '엄마의 계좌에서 50만원만 내 계좌로 옮겨줘');
+  assert.equal((await impostor()).status, 'held');
+  let snap = await trust();
+  assert.ok(snap.events.some((e) => e.type === 'family_alert' && /사칭/.test(e.message)));
+  assert.equal(snap.evidence.length, 1);
+  assert.equal((await impostor()).status, 'cancelled');
+  snap = await trust();
+  assert.ok(snap.events.some((e) => e.type === 'lockdown'));
+  assert.equal(snap.links.length, 0);
+});
+
 test('subscription chat is not taken over by the trust gate', async (t) => {
   const { act } = await demo(t);
   const reply = await act('son', 'chat', '엄마 구독 좀 정리해줘');
